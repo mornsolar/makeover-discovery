@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Final, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "test", "production"]
@@ -63,6 +63,19 @@ class Settings(BaseSettings):
     robots_cache_ttl_s: float = Field(default=86_400.0, ge=0.0)
     enrich_max_businesses: int = Field(default=5, ge=1, le=25)
 
+    use_playwright_fallback: bool = False
+    """Off by default: it needs Chromium installed via ``playwright install``,
+    a separate step from ``uv sync`` that a fresh checkout has not done."""
+    playwright_navigation_timeout_ms: float = Field(default=15_000.0, gt=0.0, le=120_000.0)
+
+    # --- Google Places (optional, behind a flag) -----------------------------
+    # OpenStreetMap is the primary, no-key directory; Places sits behind the
+    # same BusinessDirectory port for callers who have a key and want it.
+    google_places_enabled: bool = False
+    google_places_api_key: SecretStr | None = None
+    google_places_base_url: str = "https://places.googleapis.com/v1"
+    google_places_min_interval_s: float = Field(default=1.0, ge=0.0)
+
     # --- Search defaults ----------------------------------------------------
     default_search_radius_m: float = Field(default=1_500.0, ge=50.0, le=50_000.0)
     max_search_radius_m: float = Field(default=1_500.0, ge=50.0, le=50_000.0)
@@ -79,6 +92,17 @@ class Settings(BaseSettings):
             raise ValueError(
                 "MAKEOVER_USER_AGENT must identify this deployment and give a contact "
                 "address before running against public OpenStreetMap services"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _require_a_places_key_when_places_is_enabled(self) -> Settings:
+        # Fails at boot rather than on the first search: a flag flipped on
+        # without a key is a configuration mistake, not a runtime condition.
+        if self.google_places_enabled and self.google_places_api_key is None:
+            raise ValueError(
+                "MAKEOVER_GOOGLE_PLACES_API_KEY is required when "
+                "MAKEOVER_GOOGLE_PLACES_ENABLED is set"
             )
         return self
 

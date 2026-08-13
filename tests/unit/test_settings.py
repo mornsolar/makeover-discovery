@@ -39,3 +39,40 @@ def test_defaults_to_the_public_provider_endpoints():
 def test_rejects_a_non_positive_http_timeout():
     with pytest.raises(ValidationError):
         Settings(_env_file=None, http_timeout_s=0.0)
+
+
+def test_disables_google_places_by_default():
+    settings = Settings(_env_file=None)
+
+    assert settings.google_places_enabled is False
+    assert settings.google_places_api_key is None
+
+
+def test_refuses_to_start_with_places_enabled_and_no_key():
+    # A flag flipped on without a key is a configuration mistake, not a
+    # runtime condition to discover on the first search.
+    with pytest.raises(ValidationError, match="MAKEOVER_GOOGLE_PLACES_API_KEY"):
+        Settings(_env_file=None, google_places_enabled=True)
+
+
+def test_accepts_places_enabled_once_a_key_is_configured():
+    settings = Settings(_env_file=None, google_places_enabled=True, google_places_api_key="k")
+
+    assert settings.google_places_api_key is not None
+    assert settings.google_places_api_key.get_secret_value() == "k"
+
+
+def test_does_not_expose_the_places_key_through_repr():
+    # SecretStr keeps the key out of logs and error messages, not just out of
+    # source control.
+    settings = Settings(_env_file=None, google_places_enabled=True, google_places_api_key="k")
+
+    assert "k" not in repr(settings.google_places_api_key)
+
+
+def test_disables_the_playwright_fallback_by_default():
+    # It needs a Chromium binary that `uv sync` does not install; defaulting
+    # to on would break a fresh checkout that has not run `playwright install`.
+    settings = Settings(_env_file=None)
+
+    assert settings.use_playwright_fallback is False

@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from typing import Final
 
-from makeover_contracts.geo import GeoPoint
+from makeover_contracts.geo import GeoPoint, PolygonArea
 
 EARTH_RADIUS_M: Final = 6_371_008.8
 """IUGG mean Earth radius. Ample for sizing a search radius; we are not
@@ -37,3 +37,14 @@ def bounding_box_radius_m(south: float, north: float, west: float, east: float) 
     south_west = GeoPoint(lat=south, lon=west)
     north_east = GeoPoint(lat=north, lon=east)
     return haversine_m(south_west, north_east) / 2
+
+
+def polygon_radius_m(area: PolygonArea) -> float:
+    """Radius of the circle, centred on ``query_center``, that covers every vertex.
+
+    Google Places' nearby search only accepts a centre and radius, never a
+    boundary. When the geocoder handed back a polygon, this is how much of it
+    a circle-only provider can still be asked to cover.
+    """
+    center = area.query_center
+    return max(haversine_m(center, vertex) for vertex in area.vertices)

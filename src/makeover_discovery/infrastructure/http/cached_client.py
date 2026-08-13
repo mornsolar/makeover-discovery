@@ -65,6 +65,21 @@ class CachedHttpClient:
     ) -> Any:
         return await self._fetch_json("POST", url, _canonical(form), rate_key, form=form)
 
+    async def post_json(
+        self,
+        url: str,
+        body: Mapping[str, Any],
+        *,
+        rate_key: str,
+        headers: Mapping[str, str] | None = None,
+    ) -> Any:
+        """POST a JSON body, for APIs that authenticate by header rather than by
+        query string or form field - Google Places' API key, in particular."""
+        payload = json.dumps(body, sort_keys=True)
+        return await self._fetch_json(
+            "POST", url, payload, rate_key, json_body=body, extra_headers=headers
+        )
+
     async def _fetch_json(
         self,
         method: str,
@@ -74,7 +89,12 @@ class CachedHttpClient:
         *,
         params: Mapping[str, str] | None = None,
         form: Mapping[str, str] | None = None,
+        json_body: Mapping[str, Any] | None = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> Any:
+        # Extra headers are not part of the cache key: for every adapter that
+        # uses them today, they are a constant credential or field mask, not a
+        # variable that changes what should be considered "the same request".
         key = _cache_key(method, url, payload)
         cached = await self._cache.get(key)
         if cached is not None:
@@ -83,7 +103,9 @@ class CachedHttpClient:
         # Only throttle on a genuine miss. Counting cache hits against the
         # budget would make warm requests needlessly slow for no policy gain.
         await self._rate_limiter.acquire(rate_key)
-        text = await self._request_text(method, url, params=params, form=form)
+        text = await self._request_text(
+            method, url, params=params, form=form, json_body=json_body, extra_headers=extra_headers
+        )
         await self._cache.set(key, text, self._cache_ttl_s)
         return _decode(text, url)
 
@@ -94,14 +116,19 @@ class CachedHttpClient:
         *,
         params: Mapping[str, str] | None,
         form: Mapping[str, str] | None,
+        json_body: Mapping[str, Any] | None = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> str:
         headers = {"User-Agent": self._user_agent, "Accept": "application/json"}
+        if extra_headers is not None:
+            headers.update(extra_headers)
         try:
             response = await self._client.request(
                 method,
                 url,
                 params=dict(params) if params is not None else None,
                 data=dict(form) if form is not None else None,
+                json=dict(json_body) if json_body is not None else None,
                 headers=headers,
             )
         except httpx.HTTPError as exc:

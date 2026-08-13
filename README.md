@@ -9,13 +9,12 @@ drives over HTTP. Neither repo imports the other; they share only the versioned
 
 ## Status
 
-**Phase 2 (partial) — enrichment and compliance.** Discovery works end to end
-against live OpenStreetMap. Enrichment adds a robots.txt gate, a per-host rate
-limiter, an httpx fetcher, JSON-LD + Open Graph extraction, and retention and
-redaction policies, exposed as `POST /enrich` and `makeover enrich`.
-
-Still outstanding from Phase 2: the **Playwright fetcher** for JS-rendered
-sites, and the **Google Places adapter** behind a feature flag.
+**Phase 2 complete — enrichment and compliance.** Discovery and enrichment work
+end to end against live OpenStreetMap. Enrichment adds a robots.txt gate, a
+per-host rate limiter, an httpx fetcher with a Playwright fallback for
+JS-rendered sites, JSON-LD + Open Graph extraction, and retention and
+redaction policies, exposed as `POST /enrich` and `makeover enrich`. Google
+Places is wired in as an alternate directory behind a feature flag.
 
 ## Quickstart
 
@@ -50,6 +49,24 @@ Set `MAKEOVER_USER_AGENT` to something that identifies you and gives a contact
 address before pointing this at public OpenStreetMap services — the service
 refuses to start in `production` without it.
 
+**Playwright fallback** (optional, off by default): `uv sync` installs the
+`playwright` Python package but not a browser. To enable it:
+
+```bash
+uv run playwright install chromium
+```
+
+then set `MAKEOVER_USE_PLAYWRIGHT_FALLBACK=true`. The plain HTTP fetcher runs
+first for every page; Playwright only launches when the result looks like an
+unrendered JS shell (measured live: a page with almost no visible text once
+scripts and style are stripped out).
+
+**Google Places** (optional, off by default): set
+`MAKEOVER_GOOGLE_PLACES_ENABLED=true` and `MAKEOVER_GOOGLE_PLACES_API_KEY`.
+When enabled it replaces Overpass as the directory for `/discover`; OpenStreetMap
+stays the default because it needs no key. The service refuses to start with
+the flag on and no key configured.
+
 ## Architecture
 
 Clean architecture, dependencies pointing inward:
@@ -70,9 +87,17 @@ constructor injection and request scoping.
 ## Data sources and compliance
 
 OpenStreetMap (Nominatim + Overpass) is primary; Google Places is optional and
-sits behind the same port. Nominatim's usage policy requires an identifying
-User-Agent and roughly 1 request/second, so rate limiting and caching are
-requirements, not optimisations.
+sits behind the same `BusinessDirectory` port. Nominatim's usage policy
+requires an identifying User-Agent and roughly 1 request/second, so rate
+limiting and caching are requirements, not optimisations.
+
+Google Places candidates are built through the same `RetentionPolicy` that
+gives OpenStreetMap data no expiry — Places gets its 30-day caching limit
+stamped onto every `SourceRef` for free, decided once rather than reimplemented
+per adapter. Places' own hard limits are honoured explicitly: `maxResultCount`
+is capped at 20 (a real API ceiling, not a choice), and the field mask is
+scoped to exactly what `BusinessCandidate` uses, since Places bills per field
+requested.
 
 Two behaviours here were forced by live data rather than by the docs, and both
 are load-bearing:
