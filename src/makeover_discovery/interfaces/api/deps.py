@@ -18,7 +18,14 @@ from fastapi import Depends, Request
 
 from makeover_discovery.application.ports.clock import Clock
 from makeover_discovery.application.use_cases.discover_businesses import DiscoverBusinesses
-from makeover_discovery.composition import SharedResources, build_discover_businesses
+from makeover_discovery.application.use_cases.enrich_business_profile import (
+    EnrichBusinessProfile,
+)
+from makeover_discovery.composition import (
+    SharedResources,
+    build_discover_businesses,
+    build_enrich_business_profile,
+)
 from makeover_discovery.config.settings import Settings, get_settings
 from makeover_discovery.infrastructure.time.system_clock import SystemClock
 
@@ -51,3 +58,16 @@ def provide_discover_businesses(
 
 
 DiscoverBusinessesDep = Annotated[DiscoverBusinesses, Depends(provide_discover_businesses)]
+
+
+def provide_enrich_business_profile(
+    settings: SettingsDep,
+    resources: SharedResourcesDep,
+    clock: ClockDep,
+) -> EnrichBusinessProfile:
+    return build_enrich_business_profile(settings, resources, clock)
+
+
+EnrichBusinessProfileDep = Annotated[
+    EnrichBusinessProfile, Depends(provide_enrich_business_profile)
+]

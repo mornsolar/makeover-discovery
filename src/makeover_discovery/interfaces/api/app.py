@@ -15,7 +15,7 @@ from makeover_contracts.version import CONTRACT_VERSION
 from makeover_discovery.composition import create_shared_resources
 from makeover_discovery.config.settings import get_settings
 from makeover_discovery.interfaces.api.errors import register_error_handlers
-from makeover_discovery.interfaces.api.routers import discover, health
+from makeover_discovery.interfaces.api.routers import discover, enrich, health
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(discover.router)
+    app.include_router(enrich.router)
     return app
 
 

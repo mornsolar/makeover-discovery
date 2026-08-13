@@ -14,11 +14,12 @@ from typing import Any, Final
 
 from makeover_contracts.business import BusinessCandidate
 from makeover_contracts.geo import CircleArea, GeoArea, GeoPoint, PolygonArea
-from makeover_contracts.provenance import DataLicense, DataSource, SourceRef
+from makeover_contracts.provenance import DataLicense, DataSource
 
 from makeover_discovery.application.ports.clock import Clock
 from makeover_discovery.domain.errors import UpstreamError
 from makeover_discovery.domain.model.discovery import SearchFilters
+from makeover_discovery.domain.policy.retention import RetentionPolicy
 from makeover_discovery.infrastructure.directory.osm_taxonomy import classify, selectors_for
 from makeover_discovery.infrastructure.http.cached_client import CachedHttpClient
 
@@ -47,10 +48,12 @@ class OverpassDirectory:
         clock: Clock,
         *,
         base_url: str,
+        retention: RetentionPolicy,
     ) -> None:
         self._http = http
         self._clock = clock
         self._base_url = base_url.rstrip("/")
+        self._retention = retention
 
     async def search(
         self,
@@ -99,15 +102,14 @@ class OverpassDirectory:
             location=location,
             address_line=_address_line(tags),
             website=_website(tags),
-            source=SourceRef(
+            # ODbL imposes share-alike rather than a retention window, but the
+            # policy decides that, not this adapter.
+            source=self._retention.build_source_ref(
                 source=DataSource.OPENSTREETMAP,
-                license=DataLicense.ODBL_1_0,
+                data_license=DataLicense.ODBL_1_0,
                 fetched_at=fetched_at,
                 source_id=external_id,
                 url=f"{OSM_BROWSE_URL}/{external_id}",
-                # ODbL imposes share-alike, not a retention window, so this
-                # data may be kept until it goes stale on its own.
-                retention_until=None,
             ),
         )
 

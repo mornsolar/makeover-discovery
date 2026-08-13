@@ -18,7 +18,12 @@ from makeover_contracts.business import BusinessCategory
 from makeover_contracts.geo import Postcode
 from pydantic import ValidationError
 
-from makeover_discovery.composition import build_discover_businesses, create_shared_resources
+from makeover_discovery.application.use_cases.enrich_business_profile import EnrichmentResult
+from makeover_discovery.composition import (
+    build_discover_businesses,
+    build_enrich_business_profile,
+    create_shared_resources,
+)
 from makeover_discovery.config.settings import get_settings
 from makeover_discovery.domain.errors import NotFoundError, UpstreamError
 from makeover_discovery.domain.model.discovery import (
@@ -50,7 +55,22 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[member.value for member in BusinessCategory],
         help="Restrict to a category; repeatable.",
     )
+
+    enrich = subcommands.add_parser("enrich", help="Discover then enrich the nearest businesses")
+    enrich.add_argument("postcode")
+    enrich.add_argument("--country", default="MY", help="ISO 3166-1 alpha-2 code")
+    enrich.add_argument("--limit", type=int, default=3)
     return parser
+
+
+def _query(args: argparse.Namespace) -> DiscoveryQuery:
+    return DiscoveryQuery(
+        postcode=Postcode(value=args.postcode, country=args.country),
+        filters=SearchFilters(
+            categories=tuple(BusinessCategory(value) for value in getattr(args, "category", [])),
+            limit=args.limit,
+        ),
+    )
 
 
 async def run_discover(args: argparse.Namespace) -> DiscoveryResult:
@@ -58,17 +78,26 @@ async def run_discover(args: argparse.Namespace) -> DiscoveryResult:
     resources = create_shared_resources(settings)
     try:
         use_case = build_discover_businesses(settings, resources, SystemClock())
-        query = DiscoveryQuery(
-            postcode=Postcode(value=args.postcode, country=args.country),
-            filters=SearchFilters(
-                categories=tuple(BusinessCategory(value) for value in args.category),
-                limit=args.limit,
-            ),
-        )
-        return await use_case.execute(query)
+        return await use_case.execute(_query(args))
     finally:
         # The HTTP client owns a connection pool; leaking it makes the process
         # hang on exit rather than fail visibly.
+        await resources.aclose()
+
+
+async def run_enrich(args: argparse.Namespace) -> tuple[EnrichmentResult, ...]:
+    settings = get_settings()
+    resources = create_shared_resources(settings)
+    try:
+        clock = SystemClock()
+        discovered = await build_discover_businesses(settings, resources, clock).execute(
+            _query(args)
+        )
+        enricher = build_enrich_business_profile(settings, resources, clock)
+        # Sequential on purpose: the per-host rate limiter is the point, and
+        # firing these concurrently would defeat it for a shared host.
+        return tuple([await enricher.execute(candidate) for candidate in discovered.candidates])
+    finally:
         await resources.aclose()
 
 
@@ -84,9 +113,28 @@ def render(result: DiscoveryResult) -> str:
     return "\n".join(lines)
 
 
+def render_profiles(results: tuple[EnrichmentResult, ...]) -> str:
+    lines: list[str] = []
+    for result in results:
+        profile = result.profile
+        lines.append(f"{profile.name.value}  [{profile.category.value}]")
+        lines.append(f"  id       {profile.id}")
+        lines.append(f"  website  {result.website_outcome.value}")
+        if profile.descriptors:
+            lines.append("  tags     " + ", ".join(d.value for d in profile.descriptors))
+        if profile.photo_urls:
+            lines.append(f"  photos   {len(profile.photo_urls)}")
+        lines.append("  data     " + "; ".join(profile.attributions()))
+        lines.append("")
+    return "\n".join(lines)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "enrich":
+            print(render_profiles(asyncio.run(run_enrich(args))))
+            return EXIT_OK
         result = asyncio.run(run_discover(args))
     except ValidationError as exc:
         print(f"invalid input: {exc}", file=sys.stderr)

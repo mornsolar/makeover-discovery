@@ -11,6 +11,7 @@ from makeover_contracts.provenance import DataLicense, DataSource
 
 from makeover_discovery.domain.errors import UpstreamError
 from makeover_discovery.domain.model.discovery import SearchFilters
+from makeover_discovery.domain.policy.retention import RetentionPolicy
 from makeover_discovery.infrastructure.directory.overpass import OverpassDirectory
 from tests.fakes.clock import FixedClock
 
@@ -40,7 +41,9 @@ BAKERY_WAY = {
 
 
 def build(cached_http) -> OverpassDirectory:
-    return OverpassDirectory(cached_http, FixedClock(), base_url=BASE_URL)
+    return OverpassDirectory(
+        cached_http, FixedClock(), base_url=BASE_URL, retention=RetentionPolicy()
+    )
 
 
 async def search(cached_http, elements, filters: SearchFilters | None = None):

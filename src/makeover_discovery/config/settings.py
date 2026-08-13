@@ -53,8 +53,15 @@ class Settings(BaseSettings):
     nominatim_min_interval_s: float = Field(default=1.0, ge=0.0)
     overpass_min_interval_s: float = Field(default=1.0, ge=0.0)
 
+    crawl_min_interval_s: float = Field(default=1.0, ge=0.0)
+    """Default gap between requests to any one business host."""
+
     cache_ttl_s: float = Field(default=86_400.0, ge=0.0)
     cache_max_entries: int = Field(default=512, ge=1)
+
+    # --- Enrichment ---------------------------------------------------------
+    robots_cache_ttl_s: float = Field(default=86_400.0, ge=0.0)
+    enrich_max_businesses: int = Field(default=5, ge=1, le=25)
 
     # --- Search defaults ----------------------------------------------------
     default_search_radius_m: float = Field(default=1_500.0, ge=50.0, le=50_000.0)

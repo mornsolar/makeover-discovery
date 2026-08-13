@@ -113,3 +113,35 @@ def test_closes_the_connection_pool_even_when_discovery_fails(stub_use_case, mon
 class _Exploding:
     async def execute(self, query) -> None:
         raise UpstreamError("boom")
+
+
+def test_enrich_prints_a_profile_per_business(stub_use_case, monkeypatch, capsys):
+    from makeover_discovery.application.use_cases.enrich_business_profile import (
+        EnrichBusinessProfile,
+    )
+    from makeover_discovery.domain.model.web import ExtractedContent
+    from makeover_discovery.domain.policy.redaction import RedactionPolicy
+    from makeover_discovery.domain.policy.retention import RetentionPolicy
+    from tests.fakes.clock import FixedClock
+    from tests.fakes.web import FakeExtractor, FakeWebFetcher, make_page
+
+    stub_use_case(DiscoverBusinesses(FakeGeocoder(), FakeBusinessDirectory((make_candidate(),))))
+    monkeypatch.setattr(
+        cli,
+        "build_enrich_business_profile",
+        lambda settings, resources, clock: EnrichBusinessProfile(
+            fetcher=FakeWebFetcher(make_page()),
+            extractor=FakeExtractor(ExtractedContent(descriptors=("halal",))),
+            clock=FixedClock(),
+            retention=RetentionPolicy(),
+            redaction=RedactionPolicy(),
+        ),
+    )
+
+    exit_code = cli.main(["enrich", "50450", "--limit", "1"])
+
+    output = capsys.readouterr().out
+    assert exit_code == cli.EXIT_OK
+    assert "Kedai Kopi Ali" in output
+    assert "not_listed" in output
+    assert "© OpenStreetMap contributors" in output

@@ -16,10 +16,18 @@ from makeover_discovery.application.ports.cache import ResponseCache
 from makeover_discovery.application.ports.clock import Clock
 from makeover_discovery.application.ports.rate_limiter import RateLimiter
 from makeover_discovery.application.use_cases.discover_businesses import DiscoverBusinesses
+from makeover_discovery.application.use_cases.enrich_business_profile import (
+    EnrichBusinessProfile,
+)
 from makeover_discovery.config.settings import Settings
+from makeover_discovery.domain.policy.redaction import RedactionPolicy
+from makeover_discovery.domain.policy.retention import RetentionPolicy
 from makeover_discovery.infrastructure.cache.memory import InMemoryTTLCache
+from makeover_discovery.infrastructure.crawl.httpx_fetcher import HttpxWebFetcher
+from makeover_discovery.infrastructure.crawl.robots import RobotsGate
 from makeover_discovery.infrastructure.directory import overpass
 from makeover_discovery.infrastructure.directory.overpass import OverpassDirectory
+from makeover_discovery.infrastructure.extract.html_extractor import HtmlContentExtractor
 from makeover_discovery.infrastructure.geocoding import nominatim
 from makeover_discovery.infrastructure.geocoding.nominatim import NominatimGeocoder
 from makeover_discovery.infrastructure.http.cached_client import CachedHttpClient
@@ -46,7 +54,9 @@ def create_shared_resources(settings: Settings) -> SharedResources:
     return SharedResources(
         http_client=httpx.AsyncClient(timeout=settings.http_timeout_s, follow_redirects=True),
         rate_limiter=PerKeyRateLimiter(
-            default_interval_s=settings.nominatim_min_interval_s,
+            # Any host we have no specific policy for - every business site -
+            # gets the crawl default.
+            default_interval_s=settings.crawl_min_interval_s,
             intervals={
                 nominatim.RATE_KEY: settings.nominatim_min_interval_s,
                 overpass.RATE_KEY: settings.overpass_min_interval_s,
@@ -75,5 +85,37 @@ def build_discover_businesses(
             default_radius_m=settings.default_search_radius_m,
             max_radius_m=settings.max_search_radius_m,
         ),
-        directory=OverpassDirectory(http, clock, base_url=settings.overpass_base_url),
+        directory=OverpassDirectory(
+            http,
+            clock,
+            base_url=settings.overpass_base_url,
+            retention=RetentionPolicy(),
+        ),
+    )
+
+
+def build_enrich_business_profile(
+    settings: Settings,
+    resources: SharedResources,
+    clock: Clock,
+) -> EnrichBusinessProfile:
+    robots = RobotsGate(
+        resources.http_client,
+        rate_limiter=resources.rate_limiter,
+        cache=resources.cache,
+        user_agent=settings.user_agent,
+        cache_ttl_s=settings.robots_cache_ttl_s,
+    )
+    return EnrichBusinessProfile(
+        fetcher=HttpxWebFetcher(
+            resources.http_client,
+            robots,
+            clock,
+            rate_limiter=resources.rate_limiter,
+            user_agent=settings.user_agent,
+        ),
+        extractor=HtmlContentExtractor(),
+        clock=clock,
+        retention=RetentionPolicy(),
+        redaction=RedactionPolicy(),
     )

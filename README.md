@@ -9,9 +9,13 @@ drives over HTTP. Neither repo imports the other; they share only the versioned
 
 ## Status
 
-**Phase 1 — discovery core.** `Postcode → GeoArea → BusinessCandidate[]` works
-end to end against live OpenStreetMap, via `POST /discover` and the
-`makeover discover` CLI. Enrichment and brief generation arrive in Phases 2–3.
+**Phase 2 (partial) — enrichment and compliance.** Discovery works end to end
+against live OpenStreetMap. Enrichment adds a robots.txt gate, a per-host rate
+limiter, an httpx fetcher, JSON-LD + Open Graph extraction, and retention and
+redaction policies, exposed as `POST /enrich` and `makeover enrich`.
+
+Still outstanding from Phase 2: the **Playwright fetcher** for JS-rendered
+sites, and the **Google Places adapter** behind a feature flag.
 
 ## Quickstart
 
@@ -29,6 +33,12 @@ Find businesses near a postcode:
 
 ```bash
 uv run makeover discover 50450 --country MY --limit 8
+```
+
+Discover, then pull permitted public info from each business's own site:
+
+```bash
+uv run makeover enrich 50450 --country MY --limit 4
 ```
 
 ```bash
