@@ -1,0 +1,161 @@
+{
+  "$comment": "makeover-contracts 0.1.0",
+  "$defs": {
+    "BriefGeneration": {
+      "additionalProperties": false,
+      "description": "Reproducibility metadata for a generated brief.",
+      "properties": {
+        "generated_at": {
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "model": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "prompt_version": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "seed": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model",
+        "prompt_version",
+        "seed",
+        "generated_at"
+      ],
+      "title": "BriefGeneration",
+      "type": "object"
+    },
+    "LightingMood": {
+      "description": "Art-direction intent, later mapped onto a concrete lighting rig.",
+      "enum": [
+        "warm_evening",
+        "bright_daylight",
+        "neon_night",
+        "soft_overcast"
+      ],
+      "title": "LightingMood",
+      "type": "string"
+    },
+    "SignageBrief": {
+      "additionalProperties": false,
+      "description": "What the storefront sign should say and how it should feel.",
+      "properties": {
+        "text": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "tone": {
+          "maxLength": 80,
+          "minLength": 3,
+          "title": "Tone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "tone"
+      ],
+      "title": "SignageBrief",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Art direction for one business, constrained to the renderer's vocabulary.\n\n``material_families`` and ``camera_move`` are plain strings rather than\nenums: the authoritative list lives in the renderer's ``CapabilityManifest``\nand is checked against it at compose time. That keeps this package from\nneeding a release every time the renderer gains a material.",
+  "properties": {
+    "business_id": {
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:[-_][a-z0-9]+)*$",
+      "title": "Business Id",
+      "type": "string"
+    },
+    "camera_move": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Camera Move",
+      "type": "string"
+    },
+    "contract_version": {
+      "default": "0.1.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "do_not_include": {
+      "default": [],
+      "description": "Things the render must avoid, e.g. real logos or brand marks.",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12,
+      "title": "Do Not Include",
+      "type": "array"
+    },
+    "generation": {
+      "$ref": "#/$defs/BriefGeneration"
+    },
+    "lighting_mood": {
+      "$ref": "#/$defs/LightingMood"
+    },
+    "material_families": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 6,
+      "minItems": 1,
+      "title": "Material Families",
+      "type": "array"
+    },
+    "palette": {
+      "items": {
+        "pattern": "^#[0-9A-Fa-f]{6}$",
+        "type": "string"
+      },
+      "maxItems": 6,
+      "minItems": 2,
+      "title": "Palette",
+      "type": "array"
+    },
+    "rationale": {
+      "maxLength": 1000,
+      "minLength": 10,
+      "title": "Rationale",
+      "type": "string"
+    },
+    "signage": {
+      "$ref": "#/$defs/SignageBrief"
+    },
+    "style_direction": {
+      "maxLength": 400,
+      "minLength": 10,
+      "title": "Style Direction",
+      "type": "string"
+    }
+  },
+  "required": [
+    "business_id",
+    "style_direction",
+    "palette",
+    "material_families",
+    "signage",
+    "lighting_mood",
+    "camera_move",
+    "rationale",
+    "generation"
+  ],
+  "title": "DesignBrief",
+  "type": "object"
+}

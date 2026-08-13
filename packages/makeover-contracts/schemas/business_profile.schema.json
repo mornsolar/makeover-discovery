@@ -1,0 +1,266 @@
+{
+  "$comment": "makeover-contracts 0.1.0",
+  "$defs": {
+    "BusinessCategory": {
+      "description": "Coarse category, chosen to map onto render templates rather than to\nmirror the full OpenStreetMap tag vocabulary.",
+      "enum": [
+        "restaurant",
+        "cafe",
+        "bakery",
+        "bar",
+        "retail",
+        "salon",
+        "clinic",
+        "hotel",
+        "workshop",
+        "other"
+      ],
+      "title": "BusinessCategory",
+      "type": "string"
+    },
+    "DataLicense": {
+      "description": "The terms the data arrived under.\n\nThis drives both the attribution rendered on the landing page and the\nretention sweeper, so it is a closed set rather than a free-text field.",
+      "enum": [
+        "odbl-1.0",
+        "google-places-tos",
+        "publicly-published",
+        "user-provided",
+        "not-applicable"
+      ],
+      "title": "DataLicense",
+      "type": "string"
+    },
+    "DataSource": {
+      "description": "Where a field originally came from.",
+      "enum": [
+        "openstreetmap",
+        "google_places",
+        "business_website",
+        "manual_upload",
+        "derived"
+      ],
+      "title": "DataSource",
+      "type": "string"
+    },
+    "GeoPoint": {
+      "additionalProperties": false,
+      "description": "A WGS-84 coordinate.",
+      "properties": {
+        "lat": {
+          "maximum": 90.0,
+          "minimum": -90.0,
+          "title": "Lat",
+          "type": "number"
+        },
+        "lon": {
+          "maximum": 180.0,
+          "minimum": -180.0,
+          "title": "Lon",
+          "type": "number"
+        }
+      },
+      "required": [
+        "lat",
+        "lon"
+      ],
+      "title": "GeoPoint",
+      "type": "object"
+    },
+    "Provenanced_BusinessCategory_": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/SourceRef"
+        },
+        "value": {
+          "$ref": "#/$defs/BusinessCategory"
+        }
+      },
+      "required": [
+        "value",
+        "source"
+      ],
+      "title": "Provenanced[BusinessCategory]",
+      "type": "object"
+    },
+    "Provenanced_GeoPoint_": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/SourceRef"
+        },
+        "value": {
+          "$ref": "#/$defs/GeoPoint"
+        }
+      },
+      "required": [
+        "value",
+        "source"
+      ],
+      "title": "Provenanced[GeoPoint]",
+      "type": "object"
+    },
+    "Provenanced_str_": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/SourceRef"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "source"
+      ],
+      "title": "Provenanced[str]",
+      "type": "object"
+    },
+    "SourceRef": {
+      "additionalProperties": false,
+      "description": "Where a value came from, when, and under what terms.",
+      "properties": {
+        "fetched_at": {
+          "description": "Timezone-aware UTC instant of retrieval",
+          "format": "date-time",
+          "title": "Fetched At",
+          "type": "string"
+        },
+        "license": {
+          "$ref": "#/$defs/DataLicense"
+        },
+        "retention_until": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Instant after which this value must be purged. None means no limit.",
+          "title": "Retention Until"
+        },
+        "source": {
+          "$ref": "#/$defs/DataSource"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Id"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "source",
+        "license",
+        "fetched_at"
+      ],
+      "title": "SourceRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "An enriched business, assembled from one or more permitted sources.\n\nDeliberately excludes reviews, ratings, and any named individual: none are\nneeded to infer a design brief, and all carry heavier licensing and privacy\nobligations than the rest of the profile.",
+  "properties": {
+    "address_line": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenanced_str_"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "category": {
+      "$ref": "#/$defs/Provenanced_BusinessCategory_"
+    },
+    "descriptors": {
+      "default": [],
+      "description": "Short public descriptors such as 'outdoor seating' or 'halal'.",
+      "items": {
+        "$ref": "#/$defs/Provenanced_str_"
+      },
+      "maxItems": 12,
+      "title": "Descriptors",
+      "type": "array"
+    },
+    "id": {
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:[-_][a-z0-9]+)*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "location": {
+      "$ref": "#/$defs/Provenanced_GeoPoint_"
+    },
+    "name": {
+      "$ref": "#/$defs/Provenanced_str_"
+    },
+    "phone": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenanced_str_"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "photo_urls": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Provenanced_str_"
+      },
+      "maxItems": 8,
+      "title": "Photo Urls",
+      "type": "array"
+    },
+    "website": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenanced_str_"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "category",
+    "location"
+  ],
+  "title": "BusinessProfile",
+  "type": "object"
+}

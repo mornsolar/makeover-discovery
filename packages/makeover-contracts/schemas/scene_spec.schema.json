@@ -1,0 +1,318 @@
+{
+  "$comment": "makeover-contracts 0.1.0",
+  "$defs": {
+    "CameraMove": {
+      "enum": [
+        "orbit",
+        "dolly_in",
+        "crane_down",
+        "pan"
+      ],
+      "title": "CameraMove",
+      "type": "string"
+    },
+    "CameraSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_s": {
+          "default": 5.0,
+          "maximum": 15.0,
+          "minimum": 1.0,
+          "title": "Duration S",
+          "type": "number"
+        },
+        "focal_length_mm": {
+          "default": 35.0,
+          "maximum": 200.0,
+          "minimum": 10.0,
+          "title": "Focal Length Mm",
+          "type": "number"
+        },
+        "fps": {
+          "default": 24,
+          "maximum": 60,
+          "minimum": 12,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "move": {
+          "$ref": "#/$defs/CameraMove"
+        }
+      },
+      "required": [
+        "move"
+      ],
+      "title": "CameraSpec",
+      "type": "object"
+    },
+    "LightingPreset": {
+      "description": "Concrete rigs. Mirrors ``LightingMood`` one-for-one today, but they stay\nseparate types because mood is intent and preset is implementation.",
+      "enum": [
+        "warm_evening",
+        "bright_daylight",
+        "neon_night",
+        "soft_overcast"
+      ],
+      "title": "LightingPreset",
+      "type": "string"
+    },
+    "LightingSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "color_temperature_k": {
+          "default": 5500,
+          "maximum": 12000,
+          "minimum": 1500,
+          "title": "Color Temperature K",
+          "type": "integer"
+        },
+        "key_energy_w": {
+          "default": 200.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 10000.0,
+          "title": "Key Energy W",
+          "type": "number"
+        },
+        "preset": {
+          "$ref": "#/$defs/LightingPreset"
+        }
+      },
+      "required": [
+        "preset"
+      ],
+      "title": "LightingSpec",
+      "type": "object"
+    },
+    "MaterialAssignment": {
+      "additionalProperties": false,
+      "properties": {
+        "base_color": {
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "title": "Base Color",
+          "type": "string"
+        },
+        "family": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Family",
+          "type": "string"
+        },
+        "metallic": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Metallic",
+          "type": "number"
+        },
+        "roughness": {
+          "default": 0.5,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Roughness",
+          "type": "number"
+        },
+        "slot": {
+          "$ref": "#/$defs/MaterialSlot"
+        }
+      },
+      "required": [
+        "slot",
+        "family",
+        "base_color"
+      ],
+      "title": "MaterialAssignment",
+      "type": "object"
+    },
+    "MaterialSlot": {
+      "description": "Named surfaces every storefront template exposes.",
+      "enum": [
+        "facade",
+        "trim",
+        "sign",
+        "glazing",
+        "awning",
+        "ground"
+      ],
+      "title": "MaterialSlot",
+      "type": "string"
+    },
+    "RenderEngine": {
+      "description": "Values are Blender's own engine identifiers, assigned verbatim to\n``scene.render.engine``.",
+      "enum": [
+        "BLENDER_EEVEE",
+        "CYCLES"
+      ],
+      "title": "RenderEngine",
+      "type": "string"
+    },
+    "RenderSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "$ref": "#/$defs/RenderEngine",
+          "default": "BLENDER_EEVEE"
+        },
+        "film_transparent": {
+          "default": false,
+          "title": "Film Transparent",
+          "type": "boolean"
+        },
+        "resolution_x": {
+          "default": 1280,
+          "maximum": 3840,
+          "minimum": 16,
+          "title": "Resolution X",
+          "type": "integer"
+        },
+        "resolution_y": {
+          "default": 720,
+          "maximum": 2160,
+          "minimum": 16,
+          "title": "Resolution Y",
+          "type": "integer"
+        },
+        "samples": {
+          "default": 64,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Samples",
+          "type": "integer"
+        }
+      },
+      "title": "RenderSpec",
+      "type": "object"
+    },
+    "SignageSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "emissive_strength": {
+          "default": 0.0,
+          "maximum": 50.0,
+          "minimum": 0.0,
+          "title": "Emissive Strength",
+          "type": "number"
+        },
+        "font_family": {
+          "default": "Inter",
+          "maxLength": 64,
+          "title": "Font Family",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "SignageSpec",
+      "type": "object"
+    },
+    "StorefrontDimensions": {
+      "additionalProperties": false,
+      "properties": {
+        "depth_m": {
+          "exclusiveMinimum": 0.5,
+          "maximum": 20.0,
+          "title": "Depth M",
+          "type": "number"
+        },
+        "height_m": {
+          "exclusiveMinimum": 1.0,
+          "maximum": 20.0,
+          "title": "Height M",
+          "type": "number"
+        },
+        "width_m": {
+          "exclusiveMinimum": 1.0,
+          "maximum": 40.0,
+          "title": "Width M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "width_m",
+        "height_m",
+        "depth_m"
+      ],
+      "title": "StorefrontDimensions",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A complete, deterministic description of one render job's input.",
+  "properties": {
+    "camera": {
+      "$ref": "#/$defs/CameraSpec"
+    },
+    "contract_version": {
+      "default": "0.1.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "dimensions": {
+      "$ref": "#/$defs/StorefrontDimensions"
+    },
+    "lighting": {
+      "$ref": "#/$defs/LightingSpec"
+    },
+    "materials": {
+      "items": {
+        "$ref": "#/$defs/MaterialAssignment"
+      },
+      "minItems": 1,
+      "title": "Materials",
+      "type": "array"
+    },
+    "palette": {
+      "items": {
+        "pattern": "^#[0-9A-Fa-f]{6}$",
+        "type": "string"
+      },
+      "maxItems": 6,
+      "minItems": 1,
+      "title": "Palette",
+      "type": "array"
+    },
+    "render": {
+      "$ref": "#/$defs/RenderSpec",
+      "default": {
+        "engine": "BLENDER_EEVEE",
+        "film_transparent": false,
+        "resolution_x": 1280,
+        "resolution_y": 720,
+        "samples": 64
+      }
+    },
+    "seed": {
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "signage": {
+      "$ref": "#/$defs/SignageSpec"
+    },
+    "template_id": {
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:[-_][a-z0-9]+)*$",
+      "title": "Template Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "template_id",
+    "seed",
+    "dimensions",
+    "palette",
+    "materials",
+    "signage",
+    "lighting",
+    "camera"
+  ],
+  "title": "SceneSpec",
+  "type": "object"
+}

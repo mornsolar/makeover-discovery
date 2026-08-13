@@ -1,0 +1,216 @@
+{
+  "$comment": "makeover-contracts 0.1.0",
+  "$defs": {
+    "CameraMove": {
+      "enum": [
+        "orbit",
+        "dolly_in",
+        "crane_down",
+        "pan"
+      ],
+      "title": "CameraMove",
+      "type": "string"
+    },
+    "LightingPreset": {
+      "description": "Concrete rigs. Mirrors ``LightingMood`` one-for-one today, but they stay\nseparate types because mood is intent and preset is implementation.",
+      "enum": [
+        "warm_evening",
+        "bright_daylight",
+        "neon_night",
+        "soft_overcast"
+      ],
+      "title": "LightingPreset",
+      "type": "string"
+    },
+    "MaterialSlot": {
+      "description": "Named surfaces every storefront template exposes.",
+      "enum": [
+        "facade",
+        "trim",
+        "sign",
+        "glazing",
+        "awning",
+        "ground"
+      ],
+      "title": "MaterialSlot",
+      "type": "string"
+    },
+    "RenderEngine": {
+      "description": "Values are Blender's own engine identifiers, assigned verbatim to\n``scene.render.engine``.",
+      "enum": [
+        "BLENDER_EEVEE",
+        "CYCLES"
+      ],
+      "title": "RenderEngine",
+      "type": "string"
+    },
+    "RenderLimits": {
+      "additionalProperties": false,
+      "description": "Hard ceilings the renderer enforces, advertised so callers can pre-check.",
+      "properties": {
+        "max_duration_s": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 60.0,
+          "title": "Max Duration S",
+          "type": "number"
+        },
+        "max_fps": {
+          "maximum": 120,
+          "minimum": 1,
+          "title": "Max Fps",
+          "type": "integer"
+        },
+        "max_frame_count": {
+          "maximum": 7200,
+          "minimum": 1,
+          "title": "Max Frame Count",
+          "type": "integer"
+        },
+        "max_resolution_x": {
+          "maximum": 7680,
+          "minimum": 16,
+          "title": "Max Resolution X",
+          "type": "integer"
+        },
+        "max_resolution_y": {
+          "maximum": 4320,
+          "minimum": 16,
+          "title": "Max Resolution Y",
+          "type": "integer"
+        },
+        "max_samples": {
+          "maximum": 16384,
+          "minimum": 1,
+          "title": "Max Samples",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_duration_s",
+        "max_fps",
+        "max_frame_count",
+        "max_resolution_x",
+        "max_resolution_y",
+        "max_samples"
+      ],
+      "title": "RenderLimits",
+      "type": "object"
+    },
+    "TemplateDescriptor": {
+      "additionalProperties": false,
+      "description": "One storefront template the renderer ships.",
+      "properties": {
+        "description": {
+          "maxLength": 400,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:[-_][a-z0-9]+)*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "material_slots": {
+          "items": {
+            "$ref": "#/$defs/MaterialSlot"
+          },
+          "minItems": 1,
+          "title": "Material Slots",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "description",
+        "material_slots"
+      ],
+      "title": "TemplateDescriptor",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The renderer's self-description.",
+  "properties": {
+    "camera_moves": {
+      "items": {
+        "$ref": "#/$defs/CameraMove"
+      },
+      "minItems": 1,
+      "title": "Camera Moves",
+      "type": "array"
+    },
+    "contract_version": {
+      "default": "0.1.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "engine_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Engine Version",
+      "type": "string"
+    },
+    "engines": {
+      "items": {
+        "$ref": "#/$defs/RenderEngine"
+      },
+      "minItems": 1,
+      "title": "Engines",
+      "type": "array"
+    },
+    "lighting_presets": {
+      "items": {
+        "$ref": "#/$defs/LightingPreset"
+      },
+      "minItems": 1,
+      "title": "Lighting Presets",
+      "type": "array"
+    },
+    "limits": {
+      "$ref": "#/$defs/RenderLimits"
+    },
+    "material_families": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Material Families",
+      "type": "array"
+    },
+    "renderer_name": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Renderer Name",
+      "type": "string"
+    },
+    "templates": {
+      "items": {
+        "$ref": "#/$defs/TemplateDescriptor"
+      },
+      "minItems": 1,
+      "title": "Templates",
+      "type": "array"
+    }
+  },
+  "required": [
+    "renderer_name",
+    "engine_version",
+    "templates",
+    "material_families",
+    "lighting_presets",
+    "camera_moves",
+    "engines",
+    "limits"
+  ],
+  "title": "CapabilityManifest",
+  "type": "object"
+}

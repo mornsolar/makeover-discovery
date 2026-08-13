@@ -1,0 +1,83 @@
+{
+  "$comment": "makeover-contracts 0.1.0",
+  "$defs": {
+    "ArtifactKind": {
+      "enum": [
+        "gltf",
+        "video",
+        "still",
+        "thumbnail"
+      ],
+      "title": "ArtifactKind",
+      "type": "string"
+    },
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "description": "A pointer to one produced file.\n\nCarries a digest so the discovery repo can verify what it fetched rather\nthan trusting the URI, which may be a presigned link from object storage.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ArtifactKind"
+        },
+        "media_type": {
+          "maxLength": 128,
+          "minLength": 3,
+          "title": "Media Type",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "uri": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "uri",
+        "media_type",
+        "size_bytes",
+        "sha256"
+      ],
+      "title": "ArtifactRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Everything one successful render produced.",
+  "properties": {
+    "gltf": {
+      "$ref": "#/$defs/ArtifactRef"
+    },
+    "stills": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ArtifactRef"
+      },
+      "title": "Stills",
+      "type": "array"
+    },
+    "thumbnail": {
+      "$ref": "#/$defs/ArtifactRef"
+    },
+    "video": {
+      "$ref": "#/$defs/ArtifactRef"
+    }
+  },
+  "required": [
+    "gltf",
+    "video",
+    "thumbnail"
+  ],
+  "title": "ArtifactBundle",
+  "type": "object"
+}
