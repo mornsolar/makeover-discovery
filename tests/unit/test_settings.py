@@ -23,10 +23,44 @@ def test_refuses_to_start_in_production_without_a_contactable_user_agent():
         Settings(_env_file=None, environment="production")
 
 
-def test_accepts_production_once_a_real_user_agent_is_configured():
-    settings = Settings(_env_file=None, environment="production", user_agent=REAL_USER_AGENT)
+def test_refuses_to_start_in_production_without_a_brief_model_key():
+    # A production deployment that cannot generate a brief is broken; saying so
+    # at boot beats discovering it on the first paid request.
+    with pytest.raises(ValidationError, match="MAKEOVER_ANTHROPIC_API_KEY"):
+        Settings(_env_file=None, environment="production", user_agent=REAL_USER_AGENT)
+
+
+def test_accepts_production_once_it_is_fully_configured():
+    settings = Settings(
+        _env_file=None,
+        environment="production",
+        user_agent=REAL_USER_AGENT,
+        anthropic_api_key="sk-test",
+    )
 
     assert settings.user_agent == REAL_USER_AGENT
+
+
+def test_needs_no_model_key_outside_production():
+    # Discovery and enrichment are useful on their own; only the brief needs it.
+    assert Settings(_env_file=None).anthropic_api_key is None
+
+
+def test_defaults_to_the_current_opus_model():
+    assert Settings(_env_file=None).anthropic_model == "claude-opus-5"
+
+
+def test_does_not_expose_the_model_key_through_repr():
+    settings = Settings(_env_file=None, anthropic_api_key="sk-secret")
+
+    assert settings.anthropic_api_key is not None
+    assert "sk-secret" not in repr(settings.anthropic_api_key)
+
+
+def test_allows_exactly_one_repair_round_by_default():
+    # More rounds mostly buy latency and tokens once the model has been handed
+    # the exact list of what was wrong.
+    assert Settings(_env_file=None).brief_max_repair_attempts == 1
 
 
 def test_defaults_to_the_public_provider_endpoints():

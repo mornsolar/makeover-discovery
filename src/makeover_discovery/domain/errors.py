@@ -23,6 +23,14 @@ class UpstreamError(MakeoverError):
     """A third-party provider failed or returned something unusable."""
 
 
+class ConfigurationError(MakeoverError):
+    """A capability was requested that this deployment is not configured for.
+
+    Distinct from ``ValidationError``: the request was fine, the operator's
+    configuration is not, so it maps to a server error rather than a client one.
+    """
+
+
 class PolicyViolationError(MakeoverError):
     """An action was refused by a licensing, retention, or robots policy.
 

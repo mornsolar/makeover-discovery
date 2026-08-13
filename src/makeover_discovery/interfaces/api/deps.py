@@ -21,10 +21,12 @@ from makeover_discovery.application.use_cases.discover_businesses import Discove
 from makeover_discovery.application.use_cases.enrich_business_profile import (
     EnrichBusinessProfile,
 )
+from makeover_discovery.application.use_cases.generate_design_brief import GenerateDesignBrief
 from makeover_discovery.composition import (
     SharedResources,
     build_discover_businesses,
     build_enrich_business_profile,
+    build_generate_design_brief,
 )
 from makeover_discovery.config.settings import Settings, get_settings
 from makeover_discovery.infrastructure.time.system_clock import SystemClock
@@ -71,3 +73,14 @@ def provide_enrich_business_profile(
 EnrichBusinessProfileDep = Annotated[
     EnrichBusinessProfile, Depends(provide_enrich_business_profile)
 ]
+
+
+def provide_generate_design_brief(
+    settings: SettingsDep,
+    resources: SharedResourcesDep,
+    clock: ClockDep,
+) -> GenerateDesignBrief:
+    return build_generate_design_brief(settings, resources, clock)
+
+
+GenerateDesignBriefDep = Annotated[GenerateDesignBrief, Depends(provide_generate_design_brief)]

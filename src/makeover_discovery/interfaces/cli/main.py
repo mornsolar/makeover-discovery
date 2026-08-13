@@ -22,10 +22,12 @@ from makeover_discovery.application.use_cases.enrich_business_profile import Enr
 from makeover_discovery.composition import (
     build_discover_businesses,
     build_enrich_business_profile,
+    build_generate_design_brief,
     create_shared_resources,
 )
 from makeover_discovery.config.settings import get_settings
-from makeover_discovery.domain.errors import NotFoundError, UpstreamError
+from makeover_discovery.domain.errors import ConfigurationError, NotFoundError, UpstreamError
+from makeover_discovery.domain.model.brief import BriefResult
 from makeover_discovery.domain.model.discovery import (
     DEFAULT_RESULT_LIMIT,
     DiscoveryQuery,
@@ -38,6 +40,7 @@ EXIT_OK: Final = 0
 EXIT_USAGE: Final = 2
 EXIT_NOT_FOUND: Final = 3
 EXIT_UPSTREAM: Final = 4
+EXIT_CONFIG: Final = 5
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
     enrich.add_argument("postcode")
     enrich.add_argument("--country", default="MY", help="ISO 3166-1 alpha-2 code")
     enrich.add_argument("--limit", type=int, default=3)
+
+    brief = subcommands.add_parser("brief", help="Discover, enrich, then generate design briefs")
+    brief.add_argument("postcode")
+    brief.add_argument("--country", default="MY", help="ISO 3166-1 alpha-2 code")
+    brief.add_argument("--limit", type=int, default=1, help="Briefs cost money; default one.")
     return parser
 
 
@@ -101,6 +109,28 @@ async def run_enrich(args: argparse.Namespace) -> tuple[EnrichmentResult, ...]:
         await resources.aclose()
 
 
+async def run_brief(args: argparse.Namespace) -> tuple[BriefResult, ...]:
+    settings = get_settings()
+    resources = create_shared_resources(settings)
+    try:
+        clock = SystemClock()
+        discovered = await build_discover_businesses(settings, resources, clock).execute(
+            _query(args)
+        )
+        enricher = build_enrich_business_profile(settings, resources, clock)
+        briefer = build_generate_design_brief(settings, resources, clock)
+        # Sequential for the same reason enrichment is, plus one more: each
+        # brief is a paid model call, so a fan-out mistake is expensive.
+        return tuple(
+            [
+                await briefer.execute((await enricher.execute(candidate)).profile)
+                for candidate in discovered.candidates
+            ]
+        )
+    finally:
+        await resources.aclose()
+
+
 def render(result: DiscoveryResult) -> str:
     lines = [f"{len(result.candidates)} business(es) near {result.postcode}", ""]
     for index, candidate in enumerate(result.candidates, start=1):
@@ -129,16 +159,46 @@ def render_profiles(results: tuple[EnrichmentResult, ...]) -> str:
     return "\n".join(lines)
 
 
+def render_briefs(results: tuple[BriefResult, ...]) -> str:
+    lines: list[str] = []
+    for result in results:
+        brief = result.brief
+        lines.append(f"{brief.business_id}")
+        lines.append(f"  style     {brief.style_direction}")
+        lines.append(f"  palette   {' '.join(brief.palette)}")
+        lines.append(f"  materials {', '.join(brief.material_families)}")
+        lines.append(f'  signage   "{brief.signage.text}" ({brief.signage.tone})')
+        lines.append(f"  lighting  {brief.lighting_mood.value}")
+        lines.append(f"  camera    {brief.camera_move}")
+        lines.append(f"  avoid     {'; '.join(brief.do_not_include)}")
+        lines.append(
+            f"  model     {brief.generation.model} / {brief.generation.prompt_version} "
+            f"/ seed {brief.generation.seed}"
+        )
+        lines.append(
+            f"  cost      ~${result.cost_usd:.4f} "
+            f"({result.usage.total_tokens} tokens, {result.attempts} attempt(s))"
+        )
+        lines.append("")
+    return "\n".join(lines)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "enrich":
             print(render_profiles(asyncio.run(run_enrich(args))))
             return EXIT_OK
+        if args.command == "brief":
+            print(render_briefs(asyncio.run(run_brief(args))))
+            return EXIT_OK
         result = asyncio.run(run_discover(args))
     except ValidationError as exc:
         print(f"invalid input: {exc}", file=sys.stderr)
         return EXIT_USAGE
+    except ConfigurationError as exc:
+        print(f"not configured: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
     except NotFoundError as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_NOT_FOUND

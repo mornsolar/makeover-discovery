@@ -7,11 +7,24 @@ selects - not the adapters themselves, which have their own test suites.
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from makeover_discovery.application.ports.rate_limiter import RateLimiter
-from makeover_discovery.composition import SharedResources, _build_directory, _build_fetcher
+from makeover_discovery.application.use_cases.generate_design_brief import GenerateDesignBrief
+from makeover_discovery.composition import (
+    SharedResources,
+    _build_capability_source,
+    _build_directory,
+    _build_fetcher,
+    build_generate_design_brief,
+)
 from makeover_discovery.config.settings import Settings
+from makeover_discovery.domain.errors import ConfigurationError
 from makeover_discovery.infrastructure.cache.memory import InMemoryTTLCache
+from makeover_discovery.infrastructure.capabilities.http_capability_source import (
+    HttpCapabilitySource,
+)
+from makeover_discovery.infrastructure.capabilities.static_manifest import StaticCapabilitySource
 from makeover_discovery.infrastructure.crawl.fallback_fetcher import FallbackWebFetcher
 from makeover_discovery.infrastructure.crawl.httpx_fetcher import HttpxWebFetcher
 from makeover_discovery.infrastructure.crawl.robots import RobotsGate
@@ -80,3 +93,45 @@ def test_wraps_httpx_with_a_playwright_fallback_when_enabled(
     )
 
     assert isinstance(fetcher, FallbackWebFetcher)
+
+
+def test_uses_the_builtin_manifest_until_a_render_service_is_configured(
+    http_client: httpx.AsyncClient, rate_limiter: RateLimiter
+):
+    source = _build_capability_source(make_settings(), resources_for(http_client, rate_limiter))
+
+    assert isinstance(source, StaticCapabilitySource)
+
+
+def test_asks_the_render_service_once_it_has_a_url(
+    http_client: httpx.AsyncClient, rate_limiter: RateLimiter
+):
+    source = _build_capability_source(
+        make_settings(render_service_url="https://render.test"),
+        resources_for(http_client, rate_limiter),
+    )
+
+    assert isinstance(source, HttpCapabilitySource)
+
+
+def test_refuses_to_build_the_brief_use_case_without_a_key(
+    http_client: httpx.AsyncClient, rate_limiter: RateLimiter
+):
+    # Configuration is checked where the capability is wired, not on the first
+    # request that happens to need it.
+    with pytest.raises(ConfigurationError, match="MAKEOVER_ANTHROPIC_API_KEY"):
+        build_generate_design_brief(
+            make_settings(), resources_for(http_client, rate_limiter), FixedClock()
+        )
+
+
+def test_builds_the_brief_use_case_when_a_key_is_present(
+    http_client: httpx.AsyncClient, rate_limiter: RateLimiter
+):
+    use_case = build_generate_design_brief(
+        make_settings(anthropic_api_key="sk-test"),
+        resources_for(http_client, rate_limiter),
+        FixedClock(),
+    )
+
+    assert isinstance(use_case, GenerateDesignBrief)

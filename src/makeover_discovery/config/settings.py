@@ -13,6 +13,7 @@ from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "test", "production"]
+Effort = Literal["low", "medium", "high", "xhigh", "max"]
 
 PLACEHOLDER_USER_AGENT: Final = "makeover-discovery/0.1 (+https://example.invalid/contact)"
 """Deliberately unusable in production.
@@ -57,6 +58,9 @@ class Settings(BaseSettings):
     """Default gap between requests to any one business host."""
 
     cache_ttl_s: float = Field(default=86_400.0, ge=0.0)
+    capabilities_cache_ttl_s: float = Field(default=300.0, ge=0.0)
+    """Shorter than the provider cache: the renderer's vocabulary changes when
+    Repo B deploys, and a day-stale manifest would silently forbid new materials."""
     cache_max_entries: int = Field(default=512, ge=1)
 
     # --- Enrichment ---------------------------------------------------------
@@ -76,6 +80,19 @@ class Settings(BaseSettings):
     google_places_base_url: str = "https://places.googleapis.com/v1"
     google_places_min_interval_s: float = Field(default=1.0, ge=0.0)
 
+    # --- Design brief (Anthropic) -------------------------------------------
+    anthropic_api_key: SecretStr | None = None
+    """Absent is a valid local state: discovery and enrichment do not need it,
+    and the brief use case refuses to build rather than failing mid-pipeline."""
+    anthropic_model: str = "claude-opus-5"
+    anthropic_max_tokens: int = Field(default=4_096, ge=256, le=128_000)
+    anthropic_effort: Effort = "high"
+    """Thinking depth and overall token spend. A brief is short but the judgement
+    behind it is not, so this defaults higher than a mechanical extraction would."""
+
+    brief_max_repair_attempts: int = Field(default=1, ge=0, le=3)
+    """Retries after a brief fails validation, each with the problems fed back."""
+
     # --- Search defaults ----------------------------------------------------
     default_search_radius_m: float = Field(default=1_500.0, ge=50.0, le=50_000.0)
     max_search_radius_m: float = Field(default=1_500.0, ge=50.0, le=50_000.0)
@@ -93,6 +110,15 @@ class Settings(BaseSettings):
                 "MAKEOVER_USER_AGENT must identify this deployment and give a contact "
                 "address before running against public OpenStreetMap services"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _require_an_anthropic_key_in_production(self) -> Settings:
+        # Locally the discovery and enrichment commands are useful without a
+        # key; a production deployment that cannot generate a brief is broken,
+        # and should say so at boot rather than at the first request.
+        if self.environment == "production" and self.anthropic_api_key is None:
+            raise ValueError("MAKEOVER_ANTHROPIC_API_KEY is required in production")
         return self
 
     @model_validator(mode="after")
