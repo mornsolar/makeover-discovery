@@ -12,6 +12,7 @@ from makeover_contracts.capability import CapabilityManifest
 from makeover_contracts.geo import GeoPoint
 from makeover_contracts.provenance import Provenanced
 
+from makeover_discovery.domain.errors import UpstreamError
 from makeover_discovery.domain.model.brief import (
     MANDATORY_EXCLUSIONS,
     BriefRequest,
@@ -102,7 +103,7 @@ class FakeBriefGenerator:
 
     def __init__(
         self,
-        briefs: list[DesignBrief] | None = None,
+        briefs: list[DesignBrief | UpstreamError] | None = None,
         usage: TokenUsage = DEFAULT_USAGE,
     ) -> None:
         self._briefs = briefs
@@ -115,8 +116,14 @@ class FakeBriefGenerator:
             brief = make_brief(request.profile, vocabulary=request.vocabulary, seed=request.seed)
         else:
             # Scripted briefs drive the repair round: first invalid, then valid.
+            # An UpstreamError entry simulates a call that never yields a brief
+            # at all, e.g. a schema-valid tool call that still fails contract
+            # validation on construction.
             index = min(len(self.requests) - 1, len(self._briefs) - 1)
-            brief = self._briefs[index]
+            scripted = self._briefs[index]
+            if isinstance(scripted, UpstreamError):
+                raise scripted
+            brief = scripted
         return GeneratedBrief(brief=brief, usage=self._usage)
 
 

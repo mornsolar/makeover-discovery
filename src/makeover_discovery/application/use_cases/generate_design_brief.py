@@ -29,6 +29,12 @@ class GenerateDesignBrief:
     One repair round rather than a loop: if a model cannot produce a valid brief
     when handed the exact list of what was wrong, further attempts mostly buy
     latency and tokens. Failing loudly is more useful than retrying quietly.
+
+    The repair round also covers a generation call that raises ``UpstreamError``
+    outright (e.g. a schema-valid tool call whose ``signage.tone`` still breaks
+    the contract's length bound) - not just ``validate_brief``'s guardrail
+    findings. Without this, that failure mode skipped the repair budget entirely
+    and ended the attempt on the first bad response.
     """
 
     def __init__(
@@ -57,7 +63,11 @@ class GenerateDesignBrief:
                 seed=seed,
                 problems=problems,
             )
-            generated = await self._generator.generate(request)
+            try:
+                generated = await self._generator.generate(request)
+            except UpstreamError as exc:
+                problems = (str(exc),)
+                continue
             usage += generated.usage
 
             brief = _with_mandatory_exclusions(generated.brief)

@@ -16,7 +16,9 @@ from typing import Any, Final
 from makeover_contracts.brief import (
     MAX_PALETTE_COLORS,
     MAX_SIGNAGE_CHARS,
+    MAX_TONE_CHARS,
     MIN_PALETTE_COLORS,
+    MIN_TONE_CHARS,
 )
 from makeover_contracts.business import BusinessProfile
 
@@ -124,7 +126,11 @@ def build_tool(request: BriefRequest) -> dict[str, Any]:
                 },
                 "signage_tone": {
                     "type": "string",
-                    "description": "How the signage should feel, e.g. 'hand-painted, warm'.",
+                    "description": (
+                        "How the signage should feel, e.g. 'hand-painted, warm'. "
+                        f"{MIN_TONE_CHARS}-{MAX_TONE_CHARS} characters - a short phrase, "
+                        "not a sentence."
+                    ),
                 },
                 "lighting_mood": {
                     "type": "string",

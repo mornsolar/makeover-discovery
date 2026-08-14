@@ -133,3 +133,29 @@ async def test_makes_no_repair_attempt_when_repairs_are_disabled():
         await build(generator, max_repair_attempts=0).execute(PROFILE)
 
     assert len(generator.requests) == 1
+
+
+async def test_repairs_a_generation_call_that_raises_outright():
+    # A schema-valid tool call can still fail DesignBrief's own contract
+    # validation (e.g. signage.tone over 80 characters) - that raises
+    # UpstreamError from generate() itself, before validate_brief ever runs.
+    generator = FakeBriefGenerator([UpstreamError("signage.tone: string too long"), make_brief()])
+
+    result = await build(generator).execute(PROFILE)
+
+    assert result.attempts == 2
+
+
+async def test_tells_the_generator_what_the_generation_failure_was():
+    generator = FakeBriefGenerator([UpstreamError("signage.tone: string too long"), make_brief()])
+
+    await build(generator).execute(PROFILE)
+
+    assert any("too long" in problem for problem in generator.requests[1].problems)
+
+
+async def test_fails_loudly_when_generation_keeps_failing():
+    generator = FakeBriefGenerator([UpstreamError("signage.tone: string too long")])
+
+    with pytest.raises(UpstreamError, match="too long"):
+        await build(generator).execute(PROFILE)

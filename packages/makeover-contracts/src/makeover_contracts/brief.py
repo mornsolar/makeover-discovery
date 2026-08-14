@@ -17,6 +17,8 @@ from makeover_contracts.version import CONTRACT_VERSION
 MIN_PALETTE_COLORS = 2
 MAX_PALETTE_COLORS = 6
 MAX_SIGNAGE_CHARS = 40
+MIN_TONE_CHARS = 3
+MAX_TONE_CHARS = 80
 MAX_SEED = 2**31 - 1
 
 
@@ -35,7 +37,7 @@ class SignageBrief(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     text: str = Field(min_length=1, max_length=MAX_SIGNAGE_CHARS)
-    tone: str = Field(min_length=3, max_length=80)
+    tone: str = Field(min_length=MIN_TONE_CHARS, max_length=MAX_TONE_CHARS)
 
     @field_validator("text")
     @classmethod
