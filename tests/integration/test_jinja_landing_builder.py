@@ -28,7 +28,18 @@ def _ref(kind: ArtifactKind, path) -> ArtifactRef:
     )
 
 
-def _rendered_project(tmp_path, *, published: bool = False, takedown: bool = False) -> Project:
+_DEFAULT_BEFORE_IMAGE = BeforeImage(
+    uri="https://example.com/before.jpg", source=BeforeImageSource.AUTO_PHOTO
+)
+
+
+def _rendered_project(
+    tmp_path,
+    *,
+    published: bool = False,
+    takedown: bool = False,
+    before_image: BeforeImage | None = _DEFAULT_BEFORE_IMAGE,
+) -> Project:
     tmp_path.mkdir(parents=True, exist_ok=True)
     video = tmp_path / "animation.mp4"
     gltf = tmp_path / "scene.glb"
@@ -60,9 +71,7 @@ def _rendered_project(tmp_path, *, published: bool = False, takedown: bool = Fal
     return Project(
         id=business.id,
         pipeline=pipeline,
-        before_image=BeforeImage(
-            uri="https://example.com/before.jpg", source=BeforeImageSource.AUTO_PHOTO
-        ),
+        before_image=before_image,
         created_at=SUBMITTED_AT,
         published=published,
         takedown=takedown,
@@ -109,6 +118,17 @@ async def test_a_remote_before_image_is_referenced_not_downloaded(tmp_path):
 
     assert "https://example.com/before.jpg" in index_path.read_text(encoding="utf-8")
     assert not (out_dir / "assets" / "before.jpg").exists()
+
+
+async def test_shows_an_upload_command_when_there_is_no_before_image(tmp_path):
+    project = _rendered_project(tmp_path / "src", published=True, before_image=None)
+    out_dir = tmp_path / "out"
+
+    index_path = await JinjaLandingPageBuilder().build(project, out_dir)
+
+    html = index_path.read_text(encoding="utf-8")
+    assert f"/projects/{project.id}/before-image" in html
+    assert "curl" in html
 
 
 async def test_a_takedown_project_gets_a_placeholder_page_instead(tmp_path):

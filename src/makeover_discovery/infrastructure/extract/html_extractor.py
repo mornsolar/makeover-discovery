@@ -3,7 +3,10 @@
 Structured data first, page furniture second. A business that publishes JSON-LD
 has stated what it is; Open Graph tags are the next best thing; the ``<title>``
 is a last resort. Reading them in that order means a site redesign degrades the
-result rather than breaking it.
+result rather than breaking it. Photo extraction follows the same escalation:
+JSON-LD, then Open Graph/Twitter Card meta tags, then - only when nothing
+structured said anything - a scan of the page's own ``<img>`` tags, since most
+small-business sites never publish either.
 """
 
 from __future__ import annotations
@@ -29,6 +32,14 @@ PARSER: Final = "lxml"
 MAX_DESCRIPTION_CHARS: Final = 1000
 MAX_NAME_CHARS: Final = 200
 MAX_PHONE_CHARS: Final = 64
+
+MIN_IMG_DIMENSION_PX: Final = 200
+"""Below this, a generic ``<img>`` is more likely UI furniture (an icon, a
+divider, a tracking pixel) than a photo of the business - only applied when
+the tag actually states a size; most real photos state none at all."""
+
+_ICON_SRC_HINTS: Final = ("logo", "icon", "sprite", "avatar", "pixel", "spinner", "placeholder")
+_IMG_SRC_ATTRS: Final = ("src", "data-src", "data-lazy-src")
 
 
 class HtmlContentExtractor:
@@ -85,6 +96,14 @@ def _photos(
     og_image = _og(soup, "image")
     if og_image:
         candidates.append(og_image)
+    twitter_image = _meta(soup, "twitter:image") or _meta(soup, "twitter:image:src")
+    if twitter_image:
+        candidates.append(twitter_image)
+    if not candidates:
+        # Nothing structured named a photo at all - most small-business sites
+        # never publish JSON-LD or a card image, so this is the common case,
+        # not a rare one. Page furniture only now, never ahead of it.
+        candidates.extend(_generic_image_srcs(soup))
 
     absolute: dict[str, None] = {}
     for candidate in candidates:
@@ -94,6 +113,47 @@ def _photos(
         if urlsplit(resolved).scheme in {"http", "https"}:
             absolute.setdefault(resolved, None)
     return tuple(absolute)[:MAX_PHOTOS]
+
+
+def _generic_image_srcs(soup: BeautifulSoup) -> list[str]:
+    found: list[str] = []
+    for img in soup.find_all("img"):
+        if not isinstance(img, Tag) or not _looks_like_a_photo(img):
+            continue
+        src = _img_src(img)
+        if src is not None:
+            found.append(src)
+    return found
+
+
+def _looks_like_a_photo(img: Tag) -> bool:
+    src = _img_src(img)
+    if src is not None and any(hint in src.lower() for hint in _ICON_SRC_HINTS):
+        return False
+    width, height = _int_attr(img, "width"), _int_attr(img, "height")
+    if width is None or height is None:
+        # Most real content photos declare no size at all; only a stated,
+        # small size is evidence against a tag, not the absence of one.
+        return True
+    return width >= MIN_IMG_DIMENSION_PX and height >= MIN_IMG_DIMENSION_PX
+
+
+def _img_src(img: Tag) -> str | None:
+    for attr in _IMG_SRC_ATTRS:
+        value = img.get(attr)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _int_attr(tag: Tag, name: str) -> int | None:
+    value = tag.get(name)
+    if not isinstance(value, str):
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
 
 
 def _og(soup: BeautifulSoup, name: str) -> str | None:

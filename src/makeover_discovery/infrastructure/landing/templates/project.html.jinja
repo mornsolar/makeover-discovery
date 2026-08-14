@@ -16,6 +16,7 @@
   .after-img { clip-path: inset(0 0 0 50%); }
   input[type=range] { width: 100%; margin-top: .5rem; }
   video, model-viewer { width: 100%; border-radius: .5rem; margin-top: 1.5rem; background: #000; aspect-ratio: 16 / 9; }
+  pre { background: #f1f1f1; color: #222; padding: .75rem 1rem; border-radius: .5rem; overflow-x: auto; }
   footer { margin-top: 2rem; font-size: .85rem; opacity: .75; }
 </style>
 </head>
@@ -36,7 +37,9 @@
 <input type="range" min="0" max="100" value="50" aria-label="Before/after comparison slider"
        oninput="document.getElementById('after').style.clipPath = 'inset(0 0 0 ' + this.value + '%)'">
 {% elif thumbnail_src %}
-<p><em>No before image yet — upload one to complete this project's before/after comparison.</em></p>
+<p><em>No before image yet — we couldn't find one automatically for this business.
+Upload one to complete the before/after comparison:</em></p>
+<pre>curl -F "file=@photo.jpg" http://localhost:8080/projects/{{ project.id }}/before-image</pre>
 <img src="{{ thumbnail_src }}" alt="After" style="width:100%; border-radius:.5rem;">
 {% endif %}
 

@@ -75,6 +75,94 @@ def test_falls_back_to_open_graph_when_there_is_no_structured_data():
     assert content.photo_urls == ("https://cdn.example/roti.jpg",)
 
 
+def test_falls_back_to_a_twitter_card_image_when_there_is_no_open_graph_image():
+    html = """
+    <html><head><title>Kedai Runcit</title>
+    <meta name="twitter:image" content="https://cdn.example/card.jpg">
+    </head></html>
+    """
+
+    assert extract(html).photo_urls == ("https://cdn.example/card.jpg",)
+
+
+def test_falls_back_to_a_generic_img_tag_when_nothing_structured_names_a_photo():
+    html = """
+    <html><head><title>Kedai Runcit</title></head>
+    <body><img src="/photos/storefront.jpg" width="800" height="600"></body></html>
+    """
+
+    assert extract(html).photo_urls == ("https://ali.example/photos/storefront.jpg",)
+
+
+def test_reads_a_lazy_loaded_image_from_data_src():
+    html = """
+    <html><head><title>Kedai Runcit</title></head>
+    <body><img data-src="/photos/lazy.jpg" width="800" height="600"></body></html>
+    """
+
+    assert extract(html).photo_urls == ("https://ali.example/photos/lazy.jpg",)
+
+
+def test_skips_an_img_tag_that_looks_like_a_logo_or_icon():
+    html = """
+    <html><head><title>Kedai Runcit</title></head>
+    <body><img src="/img/site-logo.png" width="800" height="600"></body></html>
+    """
+
+    assert extract(html).photo_urls == ()
+
+
+def test_skips_a_generic_img_with_a_small_declared_size():
+    html = """
+    <html><head><title>Kedai Runcit</title></head>
+    <body><img src="/img/tiny.png" width="16" height="16"></body></html>
+    """
+
+    assert extract(html).photo_urls == ()
+
+
+def test_keeps_a_generic_img_with_no_declared_size():
+    # Most real content photos never state width/height at all - only a
+    # stated, small size counts as evidence against a tag.
+    html = """
+    <html><head><title>Kedai Runcit</title></head>
+    <body><img src="/photos/storefront.jpg"></body></html>
+    """
+
+    assert extract(html).photo_urls == ("https://ali.example/photos/storefront.jpg",)
+
+
+def test_skips_an_img_tag_with_no_src_at_all():
+    html = """
+    <html><head><title>Kedai Runcit</title></head>
+    <body><img alt="decorative"></body></html>
+    """
+
+    assert extract(html).photo_urls == ()
+
+
+def test_treats_a_non_numeric_declared_size_as_unknown():
+    # A CSS-style value like "100%" is common; it is not evidence the image
+    # is small, so it must not be discarded the way a small pixel size is.
+    html = """
+    <html><head><title>Kedai Runcit</title></head>
+    <body><img src="/photos/storefront.jpg" width="100%" height="auto"></body></html>
+    """
+
+    assert extract(html).photo_urls == ("https://ali.example/photos/storefront.jpg",)
+
+
+def test_never_falls_back_to_generic_img_tags_when_open_graph_already_found_one():
+    html = """
+    <html><head><title>Roti Bakar</title>
+    <meta property="og:image" content="https://cdn.example/roti.jpg">
+    </head>
+    <body><img src="/photos/unrelated.jpg" width="800" height="600"></body></html>
+    """
+
+    assert extract(html).photo_urls == ("https://cdn.example/roti.jpg",)
+
+
 def test_falls_back_to_the_title_when_nothing_else_names_the_business():
     content = extract("<html><head><title>  Kedai  Runcit </title></head></html>")
 
