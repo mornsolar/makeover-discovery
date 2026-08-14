@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ business_name }} — AI Makeover Concept</title>
+<script src="{{ model_viewer_src }}" type="module"></script>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+  .banner { padding: .75rem 1rem; border-radius: .5rem; margin-bottom: 1rem; font-weight: 600; }
+  .disclosure { background: #fff3cd; color: #664d03; }
+  .draft { background: #f8d7da; color: #842029; }
+  .slider-wrap { position: relative; max-width: 100%; aspect-ratio: 4 / 3; overflow: hidden; border-radius: .5rem; background: #ddd; }
+  .slider-wrap img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .after-img { clip-path: inset(0 0 0 50%); }
+  input[type=range] { width: 100%; margin-top: .5rem; }
+  video, model-viewer { width: 100%; border-radius: .5rem; margin-top: 1.5rem; background: #000; aspect-ratio: 16 / 9; }
+  footer { margin-top: 2rem; font-size: .85rem; opacity: .75; }
+</style>
+</head>
+<body>
+{% if not project.published %}
+<div class="banner draft">DRAFT — not published</div>
+{% endif %}
+<div class="banner disclosure">{{ disclosure_text }}</div>
+
+<h1>{{ business_name }}</h1>
+<p>{{ business_category }}</p>
+
+{% if before_image_src and thumbnail_src %}
+<div class="slider-wrap">
+  <img src="{{ before_image_src }}" alt="Before">
+  <img id="after" class="after-img" src="{{ thumbnail_src }}" alt="After">
+</div>
+<input type="range" min="0" max="100" value="50" aria-label="Before/after comparison slider"
+       oninput="document.getElementById('after').style.clipPath = 'inset(0 0 0 ' + this.value + '%)'">
+{% elif thumbnail_src %}
+<p><em>No before image yet — upload one to complete this project's before/after comparison.</em></p>
+<img src="{{ thumbnail_src }}" alt="After" style="width:100%; border-radius:.5rem;">
+{% endif %}
+
+{% if video_src %}
+<video controls src="{{ video_src }}" poster="{{ thumbnail_src }}"></video>
+{% endif %}
+
+{% if gltf_src %}
+<model-viewer src="{{ gltf_src }}" camera-controls auto-rotate alt="3D model of the makeover concept"></model-viewer>
+{% endif %}
+
+<footer>
+{% if attributions %}
+<p>Data: {{ attributions | join('; ') }}</p>
+{% endif %}
+</footer>
+</body>
+</html>

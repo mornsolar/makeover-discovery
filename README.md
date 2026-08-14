@@ -9,37 +9,48 @@ drives over HTTP. Neither repo imports the other; they share only the versioned
 
 ## Status
 
-**Phase 6a complete — pipeline core.** The two repos talk to each other for
-real now: `makeover pipeline <postcode>` discovers a business, enriches it,
-generates a design brief, deterministically composes a `SceneSpec` from it
-(`ComposeSceneSpec` — template pick, material/colour assignment, signage
-truncation, all derived from the business's own identity so the result is
-stable across runs), submits it to `makeover-render`'s `POST /jobs`, and
-polls `GET /jobs/{id}` until the render finishes. `RunMakeoverPipeline`
-processes a batch of businesses and isolates failures per business — one
-business's brief or render failure does not discard the others' results.
+**Phase 6 complete — orchestration & landing page.** The two repos talk to
+each other for real: `makeover run <postcode> --out ./site` discovers a
+business, enriches it, generates a design brief, deterministically composes
+a `SceneSpec` (`ComposeSceneSpec` — template pick, material/colour
+assignment, signage truncation, all derived from the business's own identity
+so the result is stable across runs), submits it to `makeover-render`'s
+`POST /jobs`, polls until the render finishes, persists the result as a
+`Project` (SQLite via SQLAlchemy 2.0 async, no Alembic yet — there is no
+schema to migrate *from* until a second version exists), and writes a
+self-contained static landing page per business: before/after slider, the
+rendered mp4, an interactive `.glb` via a self-hosted `<model-viewer>`
+(vendored, not loaded from Google's CDN), attribution, and the AI-disclosure
+banner every generated page carries. Pages are **private by default** — a
+"DRAFT — not published" watermark until `makeover publish <project-id>
+--out ./site` is run, which also enforces that a project has both a
+successful render and a before-image before it can go out. A business OSM
+had no photo for gets a manual-upload path (`POST /projects/{id}/before-image`)
+rather than a broken image. `makeover takedown <project-id> --out ./site`
+hard-disables a project — the on-disk page is replaced with a minimal
+placeholder, not just a flag flip, so a taken-down project's artifacts are
+not still reachable through the normal page.
 
 **Live-verified end to end**, not just green tests: with a real `redis-server`
-+ `arq` worker + `uvicorn` running `makeover-render`, `makeover pipeline 50450
---country MY --limit 1` discovered a real business from OpenStreetMap,
-generated a **real** design brief via the live Anthropic API (this machine's
-`.env` has a key configured, so this also closed Phase 3's previously-open
-"not verified against live Anthropic" gap), composed a valid `SceneSpec`,
-and got back a real rendered `.mp4`/`.glb`/thumbnail — `ffprobe` confirmed a
-genuine 960×540/12fps/36-frame H.264 stream matching `ComposeSceneSpec`'s own
-render settings exactly. The config guard was checked too: with
-`MAKEOVER_RENDER_SERVICE_URL` unset, the command fails fast with a clear
-`not configured` message rather than a confusing failure deeper in the
-pipeline.
++ `arq` worker + `uvicorn` running `makeover-render`, `makeover run 50450
+--country MY --limit 1 --out ./site` discovered a real business from
+OpenStreetMap, generated a **real** design brief via the live Anthropic API
+(this machine's `.env` has a key configured), got back a real rendered
+`.mp4`/`.glb`/thumbnail (`ffprobe` confirmed a genuine
+960×540/12fps/36-frame H.264 stream), and wrote a real landing page with the
+DRAFT watermark. A manual before-image upload, `publish` (watermark removed,
+`published=true` persisted, confirmed via both the API and a fresh
+`sqlite3` read), a refused publish without a before-image, `takedown`
+(placeholder page, `published=false`/`takedown=true` persisted), and a
+refused re-publish over an active takedown were all checked against the
+live stack too - not only against fakes.
 
-**Not yet built (Phase 6b): persistence, the landing page, and the publish
-gate.** Nothing from this pipeline run is saved anywhere — `PipelineResult`
-lives only in memory for the duration of one CLI invocation. There is no
-`Project` aggregate, no database, no before/after landing page, and no
-`makeover run ... --out ./site` command yet; see the roadmap plan for the
-6b scope (SQLAlchemy/Alembic storage, local artifact store, Jinja2 landing
-page with a self-hosted `<model-viewer>`, private-by-default publish gate,
-manual before-image upload).
+**Not verified this phase:** the API's `POST /projects` endpoint was
+exercised only against fakes in the test suite, not against a live Repo B
+(the CLI's `run` command covers the same code path and was the one
+live-verified). Alembic migrations were deliberately not added - see the
+roadmap plan for why; `Base.metadata.create_all` is what both the CLI and
+the API's lifespan actually run.
 
 ## Quickstart
 
@@ -72,12 +83,33 @@ is a paid model call, so the default limit is one):
 uv run makeover brief 50450 --country MY --limit 1
 ```
 
-Run the full pipeline through to a real render (needs `MAKEOVER_RENDER_SERVICE_URL`
-pointing at a running `makeover-render`, plus everything `brief` needs — this
-is also a paid model call, so the default limit is one):
+Run the full pipeline through to a real render, without persisting anything
+(needs `MAKEOVER_RENDER_SERVICE_URL` pointing at a running `makeover-render`,
+plus everything `brief` needs — this is also a paid model call, so the
+default limit is one):
 
 ```bash
 uv run makeover pipeline 50450 --country MY --limit 1
+```
+
+Run the same pipeline, save each result as a `Project`, and write a local
+landing page per business (same requirements as `pipeline` above):
+
+```bash
+uv run makeover run 50450 --country MY --limit 1 --out ./site
+```
+
+Publish a saved project (requires a before-image — auto-picked from OSM
+photos when one exists, otherwise upload one first) or take one down:
+
+```bash
+uv run makeover publish <project-id> --out ./site
+uv run makeover takedown <project-id> --out ./site
+```
+
+```bash
+curl -s -X POST localhost:8080/projects/<project-id>/before-image \
+  -F 'file=@storefront.jpg;type=image/jpeg'
 ```
 
 ```bash

@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Final
 
 from makeover_contracts.business import BusinessCategory
@@ -23,11 +24,16 @@ from makeover_discovery.composition import (
     build_discover_businesses,
     build_enrich_business_profile,
     build_generate_design_brief,
+    build_landing_page_builder,
+    build_publish_project,
     build_run_makeover_pipeline,
+    build_save_project,
+    build_takedown_project,
     create_shared_resources,
 )
 from makeover_discovery.config.settings import get_settings
 from makeover_discovery.domain.errors import ConfigurationError, NotFoundError, UpstreamError
+from makeover_discovery.domain.errors import ValidationError as DomainValidationError
 from makeover_discovery.domain.model.brief import BriefResult
 from makeover_discovery.domain.model.discovery import (
     DEFAULT_RESULT_LIMIT,
@@ -36,6 +42,8 @@ from makeover_discovery.domain.model.discovery import (
     SearchFilters,
 )
 from makeover_discovery.domain.model.pipeline import PipelineOutcome, PipelineResult
+from makeover_discovery.domain.model.project import Project
+from makeover_discovery.infrastructure.persistence.engine import init_db
 from makeover_discovery.infrastructure.time.system_clock import SystemClock
 
 EXIT_OK: Final = 0
@@ -44,6 +52,7 @@ EXIT_NOT_FOUND: Final = 3
 EXIT_UPSTREAM: Final = 4
 EXIT_CONFIG: Final = 5
 EXIT_RENDER_FAILED: Final = 6
+EXIT_VALIDATION: Final = 7
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,6 +89,24 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline.add_argument(
         "--limit", type=int, default=1, help="Renders cost time and money; default one."
     )
+
+    run = subcommands.add_parser(
+        "run", help="Run the pipeline and write a local landing page per business"
+    )
+    run.add_argument("postcode")
+    run.add_argument("--country", default="MY", help="ISO 3166-1 alpha-2 code")
+    run.add_argument(
+        "--limit", type=int, default=1, help="Renders cost time and money; default one."
+    )
+    run.add_argument("--out", required=True, help="Directory to write each landing page into")
+
+    publish = subcommands.add_parser("publish", help="Publish a saved project")
+    publish.add_argument("project_id")
+    publish.add_argument("--out", required=True, help="Directory holding the project's page")
+
+    takedown = subcommands.add_parser("takedown", help="Hard-disable a saved project")
+    takedown.add_argument("project_id")
+    takedown.add_argument("--out", required=True, help="Directory holding the project's page")
     return parser
 
 
@@ -153,6 +180,54 @@ async def run_pipeline(args: argparse.Namespace) -> tuple[PipelineResult, ...]:
         await resources.aclose()
 
 
+async def run_run(args: argparse.Namespace) -> tuple[Project, ...]:
+    settings = get_settings()
+    resources = create_shared_resources(settings)
+    try:
+        await init_db(resources.db_engine)
+        clock = SystemClock()
+        pipeline = build_run_makeover_pipeline(settings, resources, clock)
+        save = build_save_project(settings, resources, clock)
+        landing_page = build_landing_page_builder()
+        out_dir = Path(args.out)
+
+        results = await pipeline.execute(_query(args))
+        projects = []
+        for result in results:
+            project = await save.execute(result)
+            # Written whether or not it's published - a DRAFT watermark on
+            # disk is not the same as being served anywhere.
+            await landing_page.build(project, out_dir / project.id)
+            projects.append(project)
+        return tuple(projects)
+    finally:
+        await resources.aclose()
+
+
+async def run_publish(args: argparse.Namespace) -> Project:
+    settings = get_settings()
+    resources = create_shared_resources(settings)
+    try:
+        await init_db(resources.db_engine)
+        project = await build_publish_project(resources).execute(args.project_id)
+        await build_landing_page_builder().build(project, Path(args.out) / project.id)
+        return project
+    finally:
+        await resources.aclose()
+
+
+async def run_takedown(args: argparse.Namespace) -> Project:
+    settings = get_settings()
+    resources = create_shared_resources(settings)
+    try:
+        await init_db(resources.db_engine)
+        project = await build_takedown_project(resources).execute(args.project_id)
+        await build_landing_page_builder().build(project, Path(args.out) / project.id)
+        return project
+    finally:
+        await resources.aclose()
+
+
 def render(result: DiscoveryResult) -> str:
     lines = [f"{len(result.candidates)} business(es) near {result.postcode}", ""]
     for index, candidate in enumerate(result.candidates, start=1):
@@ -220,6 +295,28 @@ def render_pipeline(results: tuple[PipelineResult, ...]) -> str:
     return "\n".join(lines)
 
 
+def render_projects(projects: tuple[Project, ...]) -> str:
+    lines: list[str] = []
+    for project in projects:
+        lines.append(f"{project.pipeline.business.name.value}  [{project.pipeline.outcome.value}]")
+        lines.append(f"  id         {project.id}")
+        lines.append(f"  published  {project.published}")
+        if project.before_image is None:
+            lines.append("  before     none - upload one before this project can be published")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def render_project(project: Project) -> str:
+    lines = [
+        f"{project.pipeline.business.name.value}  [{project.pipeline.outcome.value}]",
+        f"  id         {project.id}",
+        f"  published  {project.published}",
+        f"  takedown   {project.takedown}",
+    ]
+    return "\n".join(lines)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -238,6 +335,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             if any(result.outcome is not PipelineOutcome.RENDERED for result in results):
                 return EXIT_RENDER_FAILED
             return EXIT_OK
+        if args.command == "run":
+            print(render_projects(asyncio.run(run_run(args))))
+            return EXIT_OK
+        if args.command == "publish":
+            print(render_project(asyncio.run(run_publish(args))))
+            return EXIT_OK
+        if args.command == "takedown":
+            print(render_project(asyncio.run(run_takedown(args))))
+            return EXIT_OK
         result = asyncio.run(run_discover(args))
     except ValidationError as exc:
         print(f"invalid input: {exc}", file=sys.stderr)
@@ -248,6 +354,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except NotFoundError as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_NOT_FOUND
+    except DomainValidationError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_VALIDATION
     except UpstreamError as exc:
         print(f"upstream failure: {exc}", file=sys.stderr)
         return EXIT_UPSTREAM

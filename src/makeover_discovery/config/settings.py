@@ -7,6 +7,7 @@ boot rather than at the first request that happens to need the bad value.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Final, Literal
 
 from pydantic import Field, SecretStr, model_validator
@@ -96,6 +97,10 @@ class Settings(BaseSettings):
     # --- Rendering (Phase 6) -------------------------------------------------
     render_poll_interval_s: float = Field(default=3.0, gt=0.0, le=60.0)
     render_poll_timeout_s: float = Field(default=300.0, gt=0.0, le=3_600.0)
+
+    # --- Persistence & storage (Phase 6b) ------------------------------------
+    database_url: str = "sqlite+aiosqlite:///./var/makeover.db"
+    artifact_store_root: Path = Path("var/artifacts")
 
     # --- Search defaults ----------------------------------------------------
     default_search_radius_m: float = Field(default=1_500.0, ge=50.0, le=50_000.0)

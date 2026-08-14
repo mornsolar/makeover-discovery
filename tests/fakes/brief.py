@@ -46,6 +46,7 @@ def make_profile(
     name: str = "Kedai Kopi Ali",
     category: BusinessCategory = BusinessCategory.CAFE,
     descriptors: tuple[str, ...] = ("halal", "outdoor seating"),
+    photo_urls: tuple[str, ...] = (),
 ) -> BusinessProfile:
     source = osm_source()
     return BusinessProfile(
@@ -54,6 +55,7 @@ def make_profile(
         category=Provenanced(value=category, source=source),
         location=Provenanced(value=GeoPoint(lat=3.16, lon=101.71), source=source),
         descriptors=tuple(Provenanced(value=text, source=source) for text in descriptors),
+        photo_urls=tuple(Provenanced(value=url, source=source) for url in photo_urls),
     )
 
 

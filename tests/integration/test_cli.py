@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from makeover_discovery.application.use_cases.discover_businesses import DiscoverBusinesses
@@ -30,6 +32,8 @@ def stub_use_case(monkeypatch):
 
 
 class _NoResources:
+    db_engine = None
+
     async def aclose(self) -> None:
         return None
 
@@ -215,3 +219,111 @@ def test_pipeline_exits_with_render_failed_when_any_business_did_not_render(monk
     assert exit_code == cli.EXIT_RENDER_FAILED
     assert "brief_failed" in output
     assert "the model could not produce a usable brief" in output
+
+
+class _FakeLandingPageBuilder:
+    def __init__(self) -> None:
+        self.built: list[tuple[object, object]] = []
+
+    async def build(self, project: object, out_dir: Path) -> Path:
+        self.built.append((project, out_dir))
+        return out_dir / "index.html"
+
+
+async def _noop_init_db(engine) -> None:
+    return None
+
+
+def test_run_saves_and_writes_a_landing_page_per_business(monkeypatch, capsys, tmp_path):
+    from makeover_discovery.application.use_cases.save_project import SaveProject
+    from tests.fakes.artifact_store import FakeArtifactStore
+    from tests.fakes.clock import FixedClock
+    from tests.fakes.project import make_pipeline_result
+    from tests.fakes.project_repository import FakeProjectRepository
+
+    repository = FakeProjectRepository()
+    landing_page = _FakeLandingPageBuilder()
+    monkeypatch.setattr(cli, "create_shared_resources", lambda settings: _NoResources())
+    monkeypatch.setattr(cli, "init_db", _noop_init_db)
+    monkeypatch.setattr(
+        cli,
+        "build_run_makeover_pipeline",
+        lambda settings, resources, clock: _ScriptedPipeline((make_pipeline_result(),)),
+    )
+    monkeypatch.setattr(
+        cli,
+        "build_save_project",
+        lambda settings, resources, clock: SaveProject(
+            repository, FakeArtifactStore(), FixedClock()
+        ),
+    )
+    monkeypatch.setattr(cli, "build_landing_page_builder", lambda: landing_page)
+
+    exit_code = cli.main(["run", "50450", "--limit", "1", "--out", str(tmp_path / "site")])
+
+    assert exit_code == cli.EXIT_OK
+    assert "Kedai Kopi Ali" in capsys.readouterr().out
+    assert len(repository.projects) == 1
+    assert len(landing_page.built) == 1
+
+
+def test_publish_flips_the_flag_and_rebuilds_the_page(monkeypatch, tmp_path):
+    from makeover_discovery.application.use_cases.publish_project import PublishProject
+    from makeover_discovery.domain.model.project import BeforeImage, BeforeImageSource
+    from tests.fakes.project import make_project
+    from tests.fakes.project_repository import FakeProjectRepository
+
+    project = make_project(
+        before_image=BeforeImage(uri="https://x/img.jpg", source=BeforeImageSource.AUTO_PHOTO)
+    )
+    repository = FakeProjectRepository((project,))
+    landing_page = _FakeLandingPageBuilder()
+    monkeypatch.setattr(cli, "create_shared_resources", lambda settings: _NoResources())
+    monkeypatch.setattr(cli, "init_db", _noop_init_db)
+    monkeypatch.setattr(cli, "build_publish_project", lambda resources: PublishProject(repository))
+    monkeypatch.setattr(cli, "build_landing_page_builder", lambda: landing_page)
+
+    exit_code = cli.main(["publish", project.id, "--out", str(tmp_path / "site")])
+
+    assert exit_code == cli.EXIT_OK
+    assert repository.projects[project.id].published is True
+    assert len(landing_page.built) == 1
+
+
+def test_publish_exits_with_the_validation_code_when_refused(monkeypatch, tmp_path):
+    from makeover_discovery.application.use_cases.publish_project import PublishProject
+    from tests.fakes.project import make_project
+    from tests.fakes.project_repository import FakeProjectRepository
+
+    project = make_project(before_image=None)
+    repository = FakeProjectRepository((project,))
+    monkeypatch.setattr(cli, "create_shared_resources", lambda settings: _NoResources())
+    monkeypatch.setattr(cli, "init_db", _noop_init_db)
+    monkeypatch.setattr(cli, "build_publish_project", lambda resources: PublishProject(repository))
+    monkeypatch.setattr(cli, "build_landing_page_builder", lambda: _FakeLandingPageBuilder())
+
+    exit_code = cli.main(["publish", project.id, "--out", str(tmp_path / "site")])
+
+    assert exit_code == cli.EXIT_VALIDATION
+
+
+def test_takedown_hard_disables_and_rebuilds_the_page(monkeypatch, tmp_path):
+    from makeover_discovery.application.use_cases.takedown_project import TakedownProject
+    from tests.fakes.project import make_project
+    from tests.fakes.project_repository import FakeProjectRepository
+
+    project = make_project(published=True)
+    repository = FakeProjectRepository((project,))
+    landing_page = _FakeLandingPageBuilder()
+    monkeypatch.setattr(cli, "create_shared_resources", lambda settings: _NoResources())
+    monkeypatch.setattr(cli, "init_db", _noop_init_db)
+    monkeypatch.setattr(
+        cli, "build_takedown_project", lambda resources: TakedownProject(repository)
+    )
+    monkeypatch.setattr(cli, "build_landing_page_builder", lambda: landing_page)
+
+    exit_code = cli.main(["takedown", project.id, "--out", str(tmp_path / "site")])
+
+    assert exit_code == cli.EXIT_OK
+    assert repository.projects[project.id].takedown is True
+    assert len(landing_page.built) == 1

@@ -13,11 +13,15 @@ from typing import Any
 
 import httpx
 from anthropic import AsyncAnthropic
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
+from makeover_discovery.application.ports.artifact_store import ArtifactStore
 from makeover_discovery.application.ports.business_directory import BusinessDirectory
 from makeover_discovery.application.ports.cache import ResponseCache
 from makeover_discovery.application.ports.capability_source import CapabilitySource
 from makeover_discovery.application.ports.clock import Clock
+from makeover_discovery.application.ports.landing_page_builder import LandingPageBuilder
+from makeover_discovery.application.ports.project_repository import ProjectRepository
 from makeover_discovery.application.ports.rate_limiter import RateLimiter
 from makeover_discovery.application.ports.web_fetcher import WebFetcher
 from makeover_discovery.application.use_cases.compose_scene_spec import ComposeSceneSpec
@@ -26,7 +30,11 @@ from makeover_discovery.application.use_cases.enrich_business_profile import (
     EnrichBusinessProfile,
 )
 from makeover_discovery.application.use_cases.generate_design_brief import GenerateDesignBrief
+from makeover_discovery.application.use_cases.publish_project import PublishProject
 from makeover_discovery.application.use_cases.run_makeover_pipeline import RunMakeoverPipeline
+from makeover_discovery.application.use_cases.save_project import SaveProject
+from makeover_discovery.application.use_cases.takedown_project import TakedownProject
+from makeover_discovery.application.use_cases.upload_before_image import UploadBeforeImage
 from makeover_discovery.config.settings import Settings
 from makeover_discovery.domain.errors import ConfigurationError
 from makeover_discovery.domain.policy.redaction import RedactionPolicy
@@ -48,12 +56,20 @@ from makeover_discovery.infrastructure.extract.html_extractor import HtmlContent
 from makeover_discovery.infrastructure.geocoding import nominatim
 from makeover_discovery.infrastructure.geocoding.nominatim import NominatimGeocoder
 from makeover_discovery.infrastructure.http.cached_client import CachedHttpClient
+from makeover_discovery.infrastructure.landing.jinja_landing_builder import (
+    JinjaLandingPageBuilder,
+)
 from makeover_discovery.infrastructure.llm.anthropic_brief_generator import (
     AnthropicBriefGenerator,
 )
 from makeover_discovery.infrastructure.llm.pricing import pricing_for
+from makeover_discovery.infrastructure.persistence.engine import create_db_engine
+from makeover_discovery.infrastructure.persistence.sqlalchemy_project_repository import (
+    SqlAlchemyProjectRepository,
+)
 from makeover_discovery.infrastructure.ratelimit.per_key import PerKeyRateLimiter
 from makeover_discovery.infrastructure.render.http_render_client import HttpRenderClient
+from makeover_discovery.infrastructure.storage.local_fs import LocalFsArtifactStore
 
 
 @dataclass(frozen=True)
@@ -67,9 +83,11 @@ class SharedResources:
     http_client: httpx.AsyncClient
     rate_limiter: RateLimiter
     cache: ResponseCache
+    db_engine: AsyncEngine
 
     async def aclose(self) -> None:
         await self.http_client.aclose()
+        await self.db_engine.dispose()
 
 
 def create_shared_resources(settings: Settings) -> SharedResources:
@@ -86,6 +104,7 @@ def create_shared_resources(settings: Settings) -> SharedResources:
             },
         ),
         cache=InMemoryTTLCache(max_entries=settings.cache_max_entries),
+        db_engine=create_db_engine(settings.database_url),
     )
 
 
@@ -257,3 +276,32 @@ def build_run_makeover_pipeline(
         poll_interval_s=settings.render_poll_interval_s,
         poll_timeout_s=settings.render_poll_timeout_s,
     )
+
+
+def build_project_repository(resources: SharedResources) -> ProjectRepository:
+    session_factory = async_sessionmaker(resources.db_engine, expire_on_commit=False)
+    return SqlAlchemyProjectRepository(session_factory)
+
+
+def _build_artifact_store(settings: Settings) -> ArtifactStore:
+    return LocalFsArtifactStore(settings.artifact_store_root)
+
+
+def build_save_project(settings: Settings, resources: SharedResources, clock: Clock) -> SaveProject:
+    return SaveProject(build_project_repository(resources), _build_artifact_store(settings), clock)
+
+
+def build_upload_before_image(settings: Settings, resources: SharedResources) -> UploadBeforeImage:
+    return UploadBeforeImage(build_project_repository(resources), _build_artifact_store(settings))
+
+
+def build_publish_project(resources: SharedResources) -> PublishProject:
+    return PublishProject(build_project_repository(resources))
+
+
+def build_takedown_project(resources: SharedResources) -> TakedownProject:
+    return TakedownProject(build_project_repository(resources))
+
+
+def build_landing_page_builder() -> LandingPageBuilder:
+    return JinjaLandingPageBuilder()

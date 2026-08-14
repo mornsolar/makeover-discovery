@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from makeover_discovery.application.ports.rate_limiter import RateLimiter
 from makeover_discovery.application.use_cases.generate_design_brief import GenerateDesignBrief
@@ -43,7 +44,10 @@ def make_settings(**overrides: object) -> Settings:
 
 def resources_for(http_client: httpx.AsyncClient, rate_limiter: RateLimiter) -> SharedResources:
     return SharedResources(
-        http_client=http_client, rate_limiter=rate_limiter, cache=InMemoryTTLCache()
+        http_client=http_client,
+        rate_limiter=rate_limiter,
+        cache=InMemoryTTLCache(),
+        db_engine=create_async_engine("sqlite+aiosqlite://"),
     )
 
 

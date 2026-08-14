@@ -17,16 +17,28 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from makeover_discovery.application.ports.clock import Clock
+from makeover_discovery.application.ports.project_repository import ProjectRepository
 from makeover_discovery.application.use_cases.discover_businesses import DiscoverBusinesses
 from makeover_discovery.application.use_cases.enrich_business_profile import (
     EnrichBusinessProfile,
 )
 from makeover_discovery.application.use_cases.generate_design_brief import GenerateDesignBrief
+from makeover_discovery.application.use_cases.publish_project import PublishProject
+from makeover_discovery.application.use_cases.run_makeover_pipeline import RunMakeoverPipeline
+from makeover_discovery.application.use_cases.save_project import SaveProject
+from makeover_discovery.application.use_cases.takedown_project import TakedownProject
+from makeover_discovery.application.use_cases.upload_before_image import UploadBeforeImage
 from makeover_discovery.composition import (
     SharedResources,
     build_discover_businesses,
     build_enrich_business_profile,
     build_generate_design_brief,
+    build_project_repository,
+    build_publish_project,
+    build_run_makeover_pipeline,
+    build_save_project,
+    build_takedown_project,
+    build_upload_before_image,
 )
 from makeover_discovery.config.settings import Settings, get_settings
 from makeover_discovery.infrastructure.time.system_clock import SystemClock
@@ -84,3 +96,56 @@ def provide_generate_design_brief(
 
 
 GenerateDesignBriefDep = Annotated[GenerateDesignBrief, Depends(provide_generate_design_brief)]
+
+
+def provide_run_makeover_pipeline(
+    settings: SettingsDep,
+    resources: SharedResourcesDep,
+    clock: ClockDep,
+) -> RunMakeoverPipeline:
+    return build_run_makeover_pipeline(settings, resources, clock)
+
+
+RunMakeoverPipelineDep = Annotated[RunMakeoverPipeline, Depends(provide_run_makeover_pipeline)]
+
+
+def provide_save_project(
+    settings: SettingsDep,
+    resources: SharedResourcesDep,
+    clock: ClockDep,
+) -> SaveProject:
+    return build_save_project(settings, resources, clock)
+
+
+SaveProjectDep = Annotated[SaveProject, Depends(provide_save_project)]
+
+
+def provide_project_repository(resources: SharedResourcesDep) -> ProjectRepository:
+    return build_project_repository(resources)
+
+
+ProjectRepositoryDep = Annotated[ProjectRepository, Depends(provide_project_repository)]
+
+
+def provide_upload_before_image(
+    settings: SettingsDep,
+    resources: SharedResourcesDep,
+) -> UploadBeforeImage:
+    return build_upload_before_image(settings, resources)
+
+
+UploadBeforeImageDep = Annotated[UploadBeforeImage, Depends(provide_upload_before_image)]
+
+
+def provide_publish_project(resources: SharedResourcesDep) -> PublishProject:
+    return build_publish_project(resources)
+
+
+PublishProjectDep = Annotated[PublishProject, Depends(provide_publish_project)]
+
+
+def provide_takedown_project(resources: SharedResourcesDep) -> TakedownProject:
+    return build_takedown_project(resources)
+
+
+TakedownProjectDep = Annotated[TakedownProject, Depends(provide_takedown_project)]

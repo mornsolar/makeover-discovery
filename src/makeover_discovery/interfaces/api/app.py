@@ -14,19 +14,22 @@ from makeover_contracts.version import CONTRACT_VERSION
 
 from makeover_discovery.composition import create_shared_resources
 from makeover_discovery.config.settings import get_settings
+from makeover_discovery.infrastructure.persistence.engine import init_db
 from makeover_discovery.interfaces.api.errors import register_error_handlers
-from makeover_discovery.interfaces.api.routers import brief, discover, enrich, health
+from makeover_discovery.interfaces.api.routers import brief, discover, enrich, health, projects
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Own the HTTP client, cache, and rate limiter for the process lifetime.
+    """Own the HTTP client, cache, rate limiter, and DB engine for the
+    process lifetime.
 
     These cannot be per-request: a rate limiter rebuilt for every call enforces
     nothing, and a connection pool rebuilt for every call is worse than none.
     """
     resources = create_shared_resources(get_settings())
     app.state.resources = resources
+    await init_db(resources.db_engine)
     try:
         yield
     finally:
@@ -45,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(discover.router)
     app.include_router(enrich.router)
     app.include_router(brief.router)
+    app.include_router(projects.router)
     return app
 
 
