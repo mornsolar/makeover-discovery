@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     brief_max_repair_attempts: int = Field(default=1, ge=0, le=3)
     """Retries after a brief fails validation, each with the problems fed back."""
 
+    # --- Rendering (Phase 6) -------------------------------------------------
+    render_poll_interval_s: float = Field(default=3.0, gt=0.0, le=60.0)
+    render_poll_timeout_s: float = Field(default=300.0, gt=0.0, le=3_600.0)
+
     # --- Search defaults ----------------------------------------------------
     default_search_radius_m: float = Field(default=1_500.0, ge=50.0, le=50_000.0)
     max_search_radius_m: float = Field(default=1_500.0, ge=50.0, le=50_000.0)

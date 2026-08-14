@@ -6,10 +6,14 @@ import pytest
 
 from makeover_discovery.application.use_cases.discover_businesses import DiscoverBusinesses
 from makeover_discovery.domain.errors import UpstreamError
+from makeover_discovery.domain.model.discovery import DiscoveryQuery
+from makeover_discovery.domain.model.pipeline import PipelineOutcome, PipelineResult
 from makeover_discovery.interfaces.cli import main as cli
 from tests.fakes.candidates import make_candidate
 from tests.fakes.directory import FakeBusinessDirectory
 from tests.fakes.geocoder import FailingGeocoder, FakeGeocoder
+from tests.fakes.render_client import make_render_job
+from tests.fakes.specs import make_scene_spec
 
 
 @pytest.fixture
@@ -145,3 +149,69 @@ def test_enrich_prints_a_profile_per_business(stub_use_case, monkeypatch, capsys
     assert "Kedai Kopi Ali" in output
     assert "not_listed" in output
     assert "© OpenStreetMap contributors" in output
+
+
+class _ScriptedPipeline:
+    def __init__(self, results: tuple[PipelineResult, ...]) -> None:
+        self._results = results
+
+    async def execute(self, query: DiscoveryQuery) -> tuple[PipelineResult, ...]:
+        return self._results
+
+
+def test_pipeline_prints_a_rendered_businesss_artifacts(monkeypatch, capsys):
+    from tests.fakes.brief import make_profile
+
+    profile = make_profile()
+    spec = make_scene_spec()
+    job = make_render_job(spec, job_id="job-1")
+    monkeypatch.setattr(cli, "create_shared_resources", lambda settings: _NoResources())
+    monkeypatch.setattr(
+        cli,
+        "build_run_makeover_pipeline",
+        lambda settings, resources, clock: _ScriptedPipeline(
+            (
+                PipelineResult(
+                    business=profile,
+                    outcome=PipelineOutcome.RENDERED,
+                    scene_spec=spec,
+                    render_job=job,
+                ),
+            )
+        ),
+    )
+
+    exit_code = cli.main(["pipeline", "50450", "--limit", "1"])
+
+    output = capsys.readouterr().out
+    assert exit_code == cli.EXIT_OK
+    assert "Kedai Kopi Ali" in output
+    assert job.artifacts is not None
+    assert job.artifacts.video.uri in output
+
+
+def test_pipeline_exits_with_render_failed_when_any_business_did_not_render(monkeypatch, capsys):
+    from tests.fakes.brief import make_profile
+
+    profile = make_profile()
+    monkeypatch.setattr(cli, "create_shared_resources", lambda settings: _NoResources())
+    monkeypatch.setattr(
+        cli,
+        "build_run_makeover_pipeline",
+        lambda settings, resources, clock: _ScriptedPipeline(
+            (
+                PipelineResult(
+                    business=profile,
+                    outcome=PipelineOutcome.BRIEF_FAILED,
+                    error="the model could not produce a usable brief",
+                ),
+            )
+        ),
+    )
+
+    exit_code = cli.main(["pipeline", "50450", "--limit", "1"])
+
+    output = capsys.readouterr().out
+    assert exit_code == cli.EXIT_RENDER_FAILED
+    assert "brief_failed" in output
+    assert "the model could not produce a usable brief" in output

@@ -20,11 +20,13 @@ from makeover_discovery.application.ports.capability_source import CapabilitySou
 from makeover_discovery.application.ports.clock import Clock
 from makeover_discovery.application.ports.rate_limiter import RateLimiter
 from makeover_discovery.application.ports.web_fetcher import WebFetcher
+from makeover_discovery.application.use_cases.compose_scene_spec import ComposeSceneSpec
 from makeover_discovery.application.use_cases.discover_businesses import DiscoverBusinesses
 from makeover_discovery.application.use_cases.enrich_business_profile import (
     EnrichBusinessProfile,
 )
 from makeover_discovery.application.use_cases.generate_design_brief import GenerateDesignBrief
+from makeover_discovery.application.use_cases.run_makeover_pipeline import RunMakeoverPipeline
 from makeover_discovery.config.settings import Settings
 from makeover_discovery.domain.errors import ConfigurationError
 from makeover_discovery.domain.policy.redaction import RedactionPolicy
@@ -51,6 +53,7 @@ from makeover_discovery.infrastructure.llm.anthropic_brief_generator import (
 )
 from makeover_discovery.infrastructure.llm.pricing import pricing_for
 from makeover_discovery.infrastructure.ratelimit.per_key import PerKeyRateLimiter
+from makeover_discovery.infrastructure.render.http_render_client import HttpRenderClient
 
 
 @dataclass(frozen=True)
@@ -227,3 +230,30 @@ def _build_fetcher(
     # httpx first: most business sites are server-rendered, and a browser boot
     # costs roughly two orders of magnitude more than a plain HTTP request.
     return FallbackWebFetcher(httpx_fetcher, playwright_fetcher)
+
+
+def build_run_makeover_pipeline(
+    settings: Settings,
+    resources: SharedResources,
+    clock: Clock,
+) -> RunMakeoverPipeline:
+    if settings.render_service_url is None:
+        # Nothing to submit a job to yet - the same guard shape as the
+        # Anthropic-key check in build_generate_design_brief.
+        raise ConfigurationError(
+            "MAKEOVER_RENDER_SERVICE_URL must be set to run the makeover pipeline"
+        )
+    return RunMakeoverPipeline(
+        discover=build_discover_businesses(settings, resources, clock),
+        enrich=build_enrich_business_profile(settings, resources, clock),
+        brief=build_generate_design_brief(settings, resources, clock),
+        compose=ComposeSceneSpec(),
+        capabilities=_build_capability_source(settings, resources),
+        render=HttpRenderClient(
+            resources.http_client,
+            base_url=settings.render_service_url,
+            user_agent=settings.user_agent,
+        ),
+        poll_interval_s=settings.render_poll_interval_s,
+        poll_timeout_s=settings.render_poll_timeout_s,
+    )

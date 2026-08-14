@@ -23,6 +23,7 @@ from makeover_discovery.composition import (
     build_discover_businesses,
     build_enrich_business_profile,
     build_generate_design_brief,
+    build_run_makeover_pipeline,
     create_shared_resources,
 )
 from makeover_discovery.config.settings import get_settings
@@ -34,6 +35,7 @@ from makeover_discovery.domain.model.discovery import (
     DiscoveryResult,
     SearchFilters,
 )
+from makeover_discovery.domain.model.pipeline import PipelineOutcome, PipelineResult
 from makeover_discovery.infrastructure.time.system_clock import SystemClock
 
 EXIT_OK: Final = 0
@@ -41,6 +43,7 @@ EXIT_USAGE: Final = 2
 EXIT_NOT_FOUND: Final = 3
 EXIT_UPSTREAM: Final = 4
 EXIT_CONFIG: Final = 5
+EXIT_RENDER_FAILED: Final = 6
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -68,6 +71,15 @@ def build_parser() -> argparse.ArgumentParser:
     brief.add_argument("postcode")
     brief.add_argument("--country", default="MY", help="ISO 3166-1 alpha-2 code")
     brief.add_argument("--limit", type=int, default=1, help="Briefs cost money; default one.")
+
+    pipeline = subcommands.add_parser(
+        "pipeline", help="Discover, enrich, brief, and render - the full pipeline"
+    )
+    pipeline.add_argument("postcode")
+    pipeline.add_argument("--country", default="MY", help="ISO 3166-1 alpha-2 code")
+    pipeline.add_argument(
+        "--limit", type=int, default=1, help="Renders cost time and money; default one."
+    )
     return parser
 
 
@@ -131,6 +143,16 @@ async def run_brief(args: argparse.Namespace) -> tuple[BriefResult, ...]:
         await resources.aclose()
 
 
+async def run_pipeline(args: argparse.Namespace) -> tuple[PipelineResult, ...]:
+    settings = get_settings()
+    resources = create_shared_resources(settings)
+    try:
+        use_case = build_run_makeover_pipeline(settings, resources, SystemClock())
+        return await use_case.execute(_query(args))
+    finally:
+        await resources.aclose()
+
+
 def render(result: DiscoveryResult) -> str:
     lines = [f"{len(result.candidates)} business(es) near {result.postcode}", ""]
     for index, candidate in enumerate(result.candidates, start=1):
@@ -183,6 +205,21 @@ def render_briefs(results: tuple[BriefResult, ...]) -> str:
     return "\n".join(lines)
 
 
+def render_pipeline(results: tuple[PipelineResult, ...]) -> str:
+    lines: list[str] = []
+    for result in results:
+        lines.append(f"{result.business.name.value}  [{result.outcome.value}]")
+        artifacts = result.render_job.artifacts if result.render_job else None
+        if artifacts is not None:
+            lines.append(f"  video      {artifacts.video.uri}")
+            lines.append(f"  gltf       {artifacts.gltf.uri}")
+            lines.append(f"  thumbnail  {artifacts.thumbnail.uri}")
+        if result.error:
+            lines.append(f"  error      {result.error}")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -191,6 +228,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             return EXIT_OK
         if args.command == "brief":
             print(render_briefs(asyncio.run(run_brief(args))))
+            return EXIT_OK
+        if args.command == "pipeline":
+            results = asyncio.run(run_pipeline(args))
+            print(render_pipeline(results))
+            # A batch is only fully successful if every business rendered;
+            # a script driving this command needs that signal to know
+            # whether to look at the per-business errors printed above.
+            if any(result.outcome is not PipelineOutcome.RENDERED for result in results):
+                return EXIT_RENDER_FAILED
             return EXIT_OK
         result = asyncio.run(run_discover(args))
     except ValidationError as exc:

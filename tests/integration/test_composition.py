@@ -11,12 +11,14 @@ import pytest
 
 from makeover_discovery.application.ports.rate_limiter import RateLimiter
 from makeover_discovery.application.use_cases.generate_design_brief import GenerateDesignBrief
+from makeover_discovery.application.use_cases.run_makeover_pipeline import RunMakeoverPipeline
 from makeover_discovery.composition import (
     SharedResources,
     _build_capability_source,
     _build_directory,
     _build_fetcher,
     build_generate_design_brief,
+    build_run_makeover_pipeline,
 )
 from makeover_discovery.config.settings import Settings
 from makeover_discovery.domain.errors import ConfigurationError
@@ -135,3 +137,28 @@ def test_builds_the_brief_use_case_when_a_key_is_present(
     )
 
     assert isinstance(use_case, GenerateDesignBrief)
+
+
+def test_refuses_to_build_the_pipeline_without_a_render_service_url(
+    http_client: httpx.AsyncClient, rate_limiter: RateLimiter
+):
+    # There is nothing to submit a job to yet - checked at wiring time, same
+    # as the Anthropic-key guard above.
+    with pytest.raises(ConfigurationError, match="MAKEOVER_RENDER_SERVICE_URL"):
+        build_run_makeover_pipeline(
+            make_settings(anthropic_api_key="sk-test"),
+            resources_for(http_client, rate_limiter),
+            FixedClock(),
+        )
+
+
+def test_builds_the_pipeline_when_a_render_service_url_is_present(
+    http_client: httpx.AsyncClient, rate_limiter: RateLimiter
+):
+    use_case = build_run_makeover_pipeline(
+        make_settings(anthropic_api_key="sk-test", render_service_url="https://render.test"),
+        resources_for(http_client, rate_limiter),
+        FixedClock(),
+    )
+
+    assert isinstance(use_case, RunMakeoverPipeline)
