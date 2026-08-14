@@ -251,28 +251,33 @@ def _build_fetcher(
     return FallbackWebFetcher(httpx_fetcher, playwright_fetcher)
 
 
+def _build_render_client(settings: Settings, resources: SharedResources) -> HttpRenderClient:
+    if settings.render_service_url is None:
+        # Nothing to submit a job to, or fetch an artifact from, yet - the
+        # same guard shape as the Anthropic-key check in
+        # build_generate_design_brief.
+        raise ConfigurationError(
+            "MAKEOVER_RENDER_SERVICE_URL must be set to run the makeover pipeline"
+        )
+    return HttpRenderClient(
+        resources.http_client,
+        base_url=settings.render_service_url,
+        user_agent=settings.user_agent,
+    )
+
+
 def build_run_makeover_pipeline(
     settings: Settings,
     resources: SharedResources,
     clock: Clock,
 ) -> RunMakeoverPipeline:
-    if settings.render_service_url is None:
-        # Nothing to submit a job to yet - the same guard shape as the
-        # Anthropic-key check in build_generate_design_brief.
-        raise ConfigurationError(
-            "MAKEOVER_RENDER_SERVICE_URL must be set to run the makeover pipeline"
-        )
     return RunMakeoverPipeline(
         discover=build_discover_businesses(settings, resources, clock),
         enrich=build_enrich_business_profile(settings, resources, clock),
         brief=build_generate_design_brief(settings, resources, clock),
         compose=ComposeSceneSpec(),
         capabilities=_build_capability_source(settings, resources),
-        render=HttpRenderClient(
-            resources.http_client,
-            base_url=settings.render_service_url,
-            user_agent=settings.user_agent,
-        ),
+        render=_build_render_client(settings, resources),
         poll_interval_s=settings.render_poll_interval_s,
         poll_timeout_s=settings.render_poll_timeout_s,
     )
@@ -288,7 +293,12 @@ def _build_artifact_store(settings: Settings) -> ArtifactStore:
 
 
 def build_save_project(settings: Settings, resources: SharedResources, clock: Clock) -> SaveProject:
-    return SaveProject(build_project_repository(resources), _build_artifact_store(settings), clock)
+    return SaveProject(
+        build_project_repository(resources),
+        _build_artifact_store(settings),
+        clock,
+        _build_render_client(settings, resources),
+    )
 
 
 def build_upload_before_image(settings: Settings, resources: SharedResources) -> UploadBeforeImage:

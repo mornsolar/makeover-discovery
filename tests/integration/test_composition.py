@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from makeover_discovery.application.ports.rate_limiter import RateLimiter
 from makeover_discovery.application.use_cases.generate_design_brief import GenerateDesignBrief
 from makeover_discovery.application.use_cases.run_makeover_pipeline import RunMakeoverPipeline
+from makeover_discovery.application.use_cases.save_project import SaveProject
 from makeover_discovery.composition import (
     SharedResources,
     _build_capability_source,
@@ -20,6 +21,7 @@ from makeover_discovery.composition import (
     _build_fetcher,
     build_generate_design_brief,
     build_run_makeover_pipeline,
+    build_save_project,
 )
 from makeover_discovery.config.settings import Settings
 from makeover_discovery.domain.errors import ConfigurationError
@@ -166,3 +168,24 @@ def test_builds_the_pipeline_when_a_render_service_url_is_present(
     )
 
     assert isinstance(use_case, RunMakeoverPipeline)
+
+
+def test_refuses_to_build_save_project_without_a_render_service_url(
+    http_client: httpx.AsyncClient, rate_limiter: RateLimiter
+):
+    # SaveProject fetches artifact bytes from the render service too, so it
+    # needs the same guard build_run_makeover_pipeline already has.
+    with pytest.raises(ConfigurationError, match="MAKEOVER_RENDER_SERVICE_URL"):
+        build_save_project(make_settings(), resources_for(http_client, rate_limiter), FixedClock())
+
+
+def test_builds_save_project_when_a_render_service_url_is_present(
+    http_client: httpx.AsyncClient, rate_limiter: RateLimiter
+):
+    use_case = build_save_project(
+        make_settings(render_service_url="https://render.test"),
+        resources_for(http_client, rate_limiter),
+        FixedClock(),
+    )
+
+    assert isinstance(use_case, SaveProject)

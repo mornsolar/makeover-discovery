@@ -43,6 +43,21 @@ class HttpRenderClient:
         payload = await self._request("GET", url)
         return _to_render_job(payload, url)
 
+    async def fetch_artifact(self, uri: str) -> bytes:
+        url = f"{self._base_url}{uri}"
+        headers = {"User-Agent": self._user_agent}
+        try:
+            response = await self._http.get(url, headers=headers)
+        except httpx.HTTPError as exc:
+            raise UpstreamError(f"{url} could not be reached: {exc}") from exc
+
+        if response.status_code == httpx.codes.NOT_FOUND:
+            raise NotFoundError(f"no artifact at {url}")
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            detail = response.text[:MAX_LOGGED_BODY_CHARS]
+            raise UpstreamError(f"{url} returned {response.status_code}: {detail}")
+        return response.content
+
     async def _request(self, method: str, url: str, *, json: Any = None) -> Any:
         headers = {"User-Agent": self._user_agent, "Accept": "application/json"}
         try:

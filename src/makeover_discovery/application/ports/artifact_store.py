@@ -9,7 +9,6 @@ own vocabulary stays independent of the render contract.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Protocol
 
 
@@ -23,9 +22,7 @@ class StoredArtifact:
 
 class ArtifactStore(Protocol):
     """Durably holds a project's files, independent of wherever they
-    originated - a render produced elsewhere, or a browser upload."""
-
-    async def store_file(self, source: Path, project_id: str, filename: str) -> StoredArtifact: ...
+    originated - a render fetched over HTTP, or a browser upload."""
 
     async def store_bytes(
         self, data: bytes, project_id: str, filename: str, media_type: str

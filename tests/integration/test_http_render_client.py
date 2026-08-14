@@ -82,3 +82,22 @@ async def test_reports_an_unreachable_render_service(http_client: httpx.AsyncCli
 
         with pytest.raises(UpstreamError, match="could not be reached"):
             await build(http_client).submit(spec)
+
+
+async def test_fetches_an_artifacts_bytes(http_client: httpx.AsyncClient):
+    with respx.mock:
+        respx.get(f"{BASE_URL}/jobs/job-1/artifacts/gltf").mock(
+            httpx.Response(200, content=b"glb-bytes")
+        )
+
+        data = await build(http_client).fetch_artifact("/jobs/job-1/artifacts/gltf")
+
+    assert data == b"glb-bytes"
+
+
+async def test_raises_not_found_for_a_missing_artifact(http_client: httpx.AsyncClient):
+    with respx.mock:
+        respx.get(f"{BASE_URL}/jobs/job-1/artifacts/gltf").mock(httpx.Response(404))
+
+        with pytest.raises(NotFoundError):
+            await build(http_client).fetch_artifact("/jobs/job-1/artifacts/gltf")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from pathlib import Path
+import hashlib
 
 from makeover_contracts.business import BusinessProfile
 from makeover_contracts.jobs import ArtifactBundle, ArtifactRef
@@ -11,6 +11,8 @@ from makeover_contracts.jobs import ArtifactBundle, ArtifactRef
 from makeover_discovery.application.ports.artifact_store import ArtifactStore
 from makeover_discovery.application.ports.clock import Clock
 from makeover_discovery.application.ports.project_repository import ProjectRepository
+from makeover_discovery.application.ports.render_client import RenderClient
+from makeover_discovery.domain.errors import UpstreamError
 from makeover_discovery.domain.model.pipeline import PipelineResult
 from makeover_discovery.domain.model.project import BeforeImage, BeforeImageSource, Project
 
@@ -26,10 +28,12 @@ class SaveProject:
         repository: ProjectRepository,
         artifact_store: ArtifactStore,
         clock: Clock,
+        render_client: RenderClient,
     ) -> None:
         self._repository = repository
         self._artifact_store = artifact_store
         self._clock = clock
+        self._render_client = render_client
 
     async def execute(self, result: PipelineResult) -> Project:
         project_id = result.business.id
@@ -66,10 +70,16 @@ class SaveProject:
         )
 
     async def _copy_ref(self, project_id: str, ref: ArtifactRef, filename: str) -> ArtifactRef:
-        # Repo B already computed size/hash for these bytes; copying them
-        # verbatim doesn't need to redo that work, only relocate them under
-        # this repo's own durable storage.
-        stored = await self._artifact_store.store_file(Path(ref.uri), project_id, filename)
+        # ref.uri is a path on Repo B's own API, not this process's own
+        # filesystem - the two services never share a disk, so the bytes have
+        # to come over HTTP rather than a local file read.
+        data = await self._render_client.fetch_artifact(ref.uri)
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != ref.sha256:
+            # The digest is exactly what ArtifactRef carries it for: proof of
+            # what was actually fetched, not just what the job record claims.
+            raise UpstreamError(f"downloaded {filename} does not match the sha256 the job reported")
+        stored = await self._artifact_store.store_bytes(data, project_id, filename, ref.media_type)
         return ArtifactRef(
             kind=ref.kind,
             uri=stored.uri,

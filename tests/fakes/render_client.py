@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 
 from makeover_contracts.jobs import ArtifactBundle, ArtifactKind, ArtifactRef, JobStatus, RenderJob
@@ -10,14 +11,20 @@ from makeover_contracts.scene import SceneSpec
 SUBMITTED_AT = datetime(2026, 8, 13, 9, 30, tzinfo=UTC)
 FINISHED_AT = datetime(2026, 8, 13, 9, 35, tzinfo=UTC)
 
+FAKE_ARTIFACT_BYTES = b"fake-artifact-bytes"
+FAKE_ARTIFACT_SHA256 = hashlib.sha256(FAKE_ARTIFACT_BYTES).hexdigest()
+"""Matches FakeRenderClient.fetch_artifact's payload, so SaveProject's digest
+check passes against these fixtures the same way it would against a real,
+matching download."""
+
 
 def _artifact_ref(kind: ArtifactKind) -> ArtifactRef:
     return ArtifactRef(
         kind=kind,
         uri=f"/out/{kind.value}",
         media_type="application/octet-stream",
-        size_bytes=1,
-        sha256="a" * 64,
+        size_bytes=len(FAKE_ARTIFACT_BYTES),
+        sha256=FAKE_ARTIFACT_SHA256,
     )
 
 
@@ -60,6 +67,7 @@ class FakeRenderClient:
     def __init__(self, poll_sequence: list[RenderJob] | None = None) -> None:
         self._poll_sequence = poll_sequence
         self.submitted: list[SceneSpec] = []
+        self.fetched_artifacts: list[str] = []
         self._poll_calls = 0
 
     async def submit(self, spec: SceneSpec) -> RenderJob:
@@ -72,3 +80,7 @@ class FakeRenderClient:
         index = min(self._poll_calls, len(self._poll_sequence) - 1)
         self._poll_calls += 1
         return self._poll_sequence[index]
+
+    async def fetch_artifact(self, uri: str) -> bytes:
+        self.fetched_artifacts.append(uri)
+        return FAKE_ARTIFACT_BYTES

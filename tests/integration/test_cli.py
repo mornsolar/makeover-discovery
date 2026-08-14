@@ -14,7 +14,7 @@ from makeover_discovery.interfaces.cli import main as cli
 from tests.fakes.candidates import make_candidate
 from tests.fakes.directory import FakeBusinessDirectory
 from tests.fakes.geocoder import FailingGeocoder, FakeGeocoder
-from tests.fakes.render_client import make_render_job
+from tests.fakes.render_client import FakeRenderClient, make_render_job
 from tests.fakes.specs import make_scene_spec
 
 
@@ -254,7 +254,7 @@ def test_run_saves_and_writes_a_landing_page_per_business(monkeypatch, capsys, t
         cli,
         "build_save_project",
         lambda settings, resources, clock: SaveProject(
-            repository, FakeArtifactStore(), FixedClock()
+            repository, FakeArtifactStore(), FixedClock(), FakeRenderClient()
         ),
     )
     monkeypatch.setattr(cli, "build_landing_page_builder", lambda: landing_page)
@@ -289,7 +289,7 @@ def test_run_prints_the_failure_reason_for_a_business_that_did_not_render(
         cli,
         "build_save_project",
         lambda settings, resources, clock: SaveProject(
-            repository, FakeArtifactStore(), FixedClock()
+            repository, FakeArtifactStore(), FixedClock(), FakeRenderClient()
         ),
     )
     monkeypatch.setattr(cli, "build_landing_page_builder", lambda: _FakeLandingPageBuilder())

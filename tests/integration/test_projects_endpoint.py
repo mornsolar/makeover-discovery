@@ -23,6 +23,7 @@ from tests.fakes.artifact_store import FakeArtifactStore
 from tests.fakes.clock import FixedClock
 from tests.fakes.project import make_pipeline_result, make_project
 from tests.fakes.project_repository import FakeProjectRepository
+from tests.fakes.render_client import FakeRenderClient
 
 HTTP_OK = 200
 HTTP_CREATED = 201
@@ -48,7 +49,7 @@ def client_for(
     app = create_app()
     app.dependency_overrides[provide_project_repository] = lambda: repository
     app.dependency_overrides[provide_save_project] = lambda: SaveProject(
-        repository, artifact_store, FixedClock()
+        repository, artifact_store, FixedClock(), FakeRenderClient()
     )
     app.dependency_overrides[provide_publish_project] = lambda: PublishProject(repository)
     app.dependency_overrides[provide_takedown_project] = lambda: TakedownProject(repository)

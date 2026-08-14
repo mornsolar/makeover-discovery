@@ -19,3 +19,12 @@ class RenderClient(Protocol):
     async def submit(self, spec: SceneSpec) -> RenderJob: ...
 
     async def poll(self, job_id: str) -> RenderJob: ...
+
+    async def fetch_artifact(self, uri: str) -> bytes:
+        """Downloads one artifact's bytes.
+
+        ``uri`` comes from an ``ArtifactRef`` on a polled job - a path on Repo
+        B's own API (``/jobs/{id}/artifacts/{kind}``), never a path on this
+        process's own filesystem. The two services do not share a disk.
+        """
+        ...

@@ -7,12 +7,10 @@ import hashlib
 from makeover_discovery.infrastructure.storage.local_fs import LocalFsArtifactStore
 
 
-async def test_store_file_copies_bytes_and_reports_the_right_hash(tmp_path):
-    source = tmp_path / "source.png"
-    source.write_bytes(b"fake-png-bytes")
+async def test_store_bytes_copies_bytes_and_reports_the_right_hash(tmp_path):
     store = LocalFsArtifactStore(tmp_path / "artifacts")
 
-    stored = await store.store_file(source, "project-1", "thumbnail.png")
+    stored = await store.store_bytes(b"fake-png-bytes", "project-1", "thumbnail.png", "image/png")
 
     dest = tmp_path / "artifacts" / "project-1" / "thumbnail.png"
     assert dest.read_bytes() == b"fake-png-bytes"
