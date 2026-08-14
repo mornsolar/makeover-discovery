@@ -303,6 +303,8 @@ def render_projects(projects: tuple[Project, ...]) -> str:
         lines.append(f"  published  {project.published}")
         if project.before_image is None:
             lines.append("  before     none - upload one before this project can be published")
+        if project.pipeline.error:
+            lines.append(f"  error      {project.pipeline.error}")
         lines.append("")
     return "\n".join(lines)
 

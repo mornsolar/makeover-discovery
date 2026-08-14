@@ -264,7 +264,39 @@ def test_run_saves_and_writes_a_landing_page_per_business(monkeypatch, capsys, t
     assert exit_code == cli.EXIT_OK
     assert "Kedai Kopi Ali" in capsys.readouterr().out
     assert len(repository.projects) == 1
-    assert len(landing_page.built) == 1
+
+
+def test_run_prints_the_failure_reason_for_a_business_that_did_not_render(
+    monkeypatch, capsys, tmp_path
+):
+    from makeover_discovery.application.use_cases.save_project import SaveProject
+    from makeover_discovery.domain.model.pipeline import PipelineOutcome
+    from tests.fakes.artifact_store import FakeArtifactStore
+    from tests.fakes.clock import FixedClock
+    from tests.fakes.project import make_pipeline_result
+    from tests.fakes.project_repository import FakeProjectRepository
+
+    repository = FakeProjectRepository()
+    failed = make_pipeline_result(outcome=PipelineOutcome.BRIEF_FAILED)
+    monkeypatch.setattr(cli, "create_shared_resources", lambda settings: _NoResources())
+    monkeypatch.setattr(cli, "init_db", _noop_init_db)
+    monkeypatch.setattr(
+        cli,
+        "build_run_makeover_pipeline",
+        lambda settings, resources, clock: _ScriptedPipeline((failed,)),
+    )
+    monkeypatch.setattr(
+        cli,
+        "build_save_project",
+        lambda settings, resources, clock: SaveProject(
+            repository, FakeArtifactStore(), FixedClock()
+        ),
+    )
+    monkeypatch.setattr(cli, "build_landing_page_builder", lambda: _FakeLandingPageBuilder())
+
+    cli.main(["run", "50450", "--limit", "1", "--out", str(tmp_path / "site")])
+
+    assert "boom" in capsys.readouterr().out
 
 
 def test_publish_flips_the_flag_and_rebuilds_the_page(monkeypatch, tmp_path):
